@@ -1,0 +1,273 @@
+{
+	"tool_name": "CycMetaAsm",
+	"tool_description": "宏基因组长读段组装与MAG分析流程（CycloneSEQ平台）",
+	"tool_description_en": "Long-read metagenomic assembly and MAG analysis (CycloneSEQ)",
+	"tool_img_name": "logo.jpg",
+	"version_info": {
+		"tool_version": "V1.0.0.0",
+		"tool_developer": "Gu Kaijie (gukaijie@genomics.cn)",
+		"tool_docker_package": "./combined_images.tar.gz",
+		"tool_zip_dependence": "./task.zip",
+		"tool_published_time": "2025-11-19",
+		"tool_workflow_Desc": [
+			"测序数据质控：调用Rosa评估原始与清洗后测序数据的读长分布、GC含量和质量值分布等质量信息",
+			"测序数据预处理：根据设定的最小读长和最低质量阈值过滤低质量读段，可选对原始数据抽样和宿主基因组去除",
+			"宏基因组组装与抛光：调用metaFlye等组装工具构建宏基因组组装序列，可选额外使用短读段数据对组装结果进行抛光",
+			"分箱与基因组质量评估：调用Semibin2和CheckM2对组装结果进行分箱并评估MAG的完整度与污染度",
+			"MAG物种注释与丰度评估：对MAG进行物种分类与丰度估计，并生成综合分析报告"
+		],
+		"tool_workflow_Desc_en": [
+			"Sequencing data QC: Use Rosa to evaluate read length distribution, GC content and base quality distribution for both raw and cleaned data",
+			"Read preprocessing: Filter low-quality reads according to minimum read length and minimum quality thresholds, with optional downsampling and host genome removal",
+			"Metagenome assembly and polishing: Use metaFlye and related tools to assemble metagenomes, with optional polishing using short-read data",
+			"Binning and genome quality assessment: Use Semibin2 and CheckM2 to bin contigs and assess MAG completeness and contamination",
+			"Taxonomic annotation and abundance estimation: Perform taxonomic classification and abundance estimation of MAGs and generate a comprehensive analysis report"
+		],
+		"tool_input_Desc": [
+			"样本ID：分析样本的编号或名称，作为结果文件的前缀",
+			"样本类型：分析样本的类型，用于选择合适的分析模式",
+			"测序数据文件：待分析测序数据文件（fastq/fq格式）",
+            "宿主基因组序列文件：去除宿主序列所用的宿主基因组序列文件",
+			"抽样数据量：分析前随机抽取的总碱基数（bp）",
+			"最小读长与最低质量：测序数据预处理过滤阈值",
+			"可选是否在组装过程中启用抛光，以及可选择加入二代测序数据辅助抛光",
+			"线程数：分析使用的线程数"
+		],
+		"tool_input_Desc_en": [
+            "Sample ID (used for naming output files)",
+            "Sample type: used to select appropriate analysis mode",
+            "Sequencing data file to be analyzed (fastq/fq)",
+            "Host genome sequence file for host read removal",
+            "Downsampling bases: total bases (bp) to randomly retain before analysis",
+            "Minimum read length and minimum quality: filtering thresholds for preprocessing",
+            "Optional polishing during assembly, with optional short-read data for polishing",
+            "Threads: number of threads used for analysis"
+		],
+		"tool_output_Desc": [
+            "分析结果综合报告（sample_CycMetaAsm_Report.html）：包含测序数据质控、组装与分箱质量评估、物种组成与丰度等信息的网页报告",
+			"分析结果汇总压缩包（sample_CycMetaAsm_Results.zip）：包含组装分箱MAG序列、质量评估结果以及物种注释与丰度结果等文件"
+		],
+		"tool_output_Desc_en": [
+            "Comprehensive analysis report (Sample_CycMetaAsm_Report.html): includes sequencing data QC, assembly and binning quality assessment, taxonomic composition and abundance, etc.",
+            "Compressed output package (sample_CycMetaAsm_Results.zip): includes MAG sequences, quality assessment results, and files for taxonomic annotation and abundance estimation"
+		],
+		"tool_parameter": [
+            {
+                "key": "CycMetaAsmWorkflow.sample_id",
+				"name": "样本ID",
+				"name_en": "Sample ID",
+				"required": true,
+				"type": "String",
+				"desc": "样本名称（用于结果文件命名）",
+				"desc_en": "Sample name (used for naming output files)",
+				"visible": true,
+				"controlType": "string",
+				"default": "sample01"
+			},
+            {
+                "key": "CycMetaAsmWorkflow.binning_mode",
+                "name": "样本类型",
+                "name_en": "Sample type",
+                "required": false,
+                "type": "String",
+                "desc": "选择样本类型，以便分析选择合适的模式（global类型用于非特定类型样本）",
+                "desc_en": "Select sample type to choose appropriate analysis mode (use 'global' for non-specific samples)",
+                "visible": true,
+                "controlType": "select",
+                "options": [
+                    "human_gut",
+                    "dog_gut",
+                    "ocean",
+                    "soil",
+                    "cat_gut",
+                    "human_oral",
+                    "mouse_gut",
+                    "pig_gut",
+                    "built_environment",
+                    "wastewater",
+                    "chicken_caecum",
+                    "global"
+                ],
+                "default": "global"
+            },
+			{
+                "key": "CycMetaAsmWorkflow.input_fastq",
+				"name": "测序数据文件",
+				"name_en": "Sequencing data file",
+				"required": true,
+				"type": "File",
+				"desc": "待分析的测序数据文件（fastq/fq格式，支持.gz压缩）",
+				"desc_en": "Sequencing data file to be analyzed (fastq/fq, .gz supported)",
+				"visible": true,
+				"controlType": "file",
+				"default": "./test/sample.fastq.gz"
+			},
+            {
+                "key": "CycMetaAsmWorkflow.downsample",
+				"name": "随机抽样数据量",
+				"name_en": "Random sampling bases",
+				"required": false,
+				"type": "String",
+				"desc": "在分析前对原始数据随机抽取的总碱基数（bp），空则不抽取",
+				"desc_en": "Total bases (bp) to randomly retain before analysis; no sampling if unset",
+				"visible": true,
+				"controlType": "string"
+			},
+            {
+                "key": "CycMetaAsmWorkflow.host_reference",
+                "name": "宿主基因组序列",
+                "name_en": "Host genome reference",
+                "required": false,
+                "type": "File",
+                "desc": "用于宿主去除的宿主基因组序列（fasta格式文件)。默认提供人源基因组；若无需去除宿主序列需留空",
+                "desc_en": "Host genome reference for host read removal (FASTA file). Default is human genome; leave empty if no host removal needed",
+                "visible": true,
+                "controlType": "file",
+                "default": "./database/GRCh38.p14.fa"
+            },
+			{
+                "key": "CycMetaAsmWorkflow.min_length",
+				"name": "最小读长",
+				"name_en": "Minimum read length",
+				"required": false,
+				"type": "Int",
+				"desc": "预处理过滤时保留的最小读长（bp）",
+				"desc_en": "Minimum read length (bp) kept during preprocessing",
+				"visible": true,
+				"controlType": "int",
+				"default": 1000
+			},
+			{
+                "key": "CycMetaAsmWorkflow.min_quality",
+				"name": "最低读段质量",
+				"name_en": "Minimum read quality",
+				"required": false,
+				"type": "Int",
+				"desc": "预处理过滤时保留的最低平均读段质量",
+				"desc_en": "Minimum mean read quality kept during preprocessing",
+				"visible": true,
+				"controlType": "int",
+				"default": 10
+			},
+			{
+                "key": "CycMetaAsmWorkflow.polish",
+				"name": "启用抛光",
+				"name_en": "Enable polishing",
+				"required": false,
+				"type": "Boolean",
+				"desc": "是否在组装后启用抛光步骤（不提供二代数据则仅进行长读段自我抛光，若提供则进行2+3抛光）",
+				"desc_en": "Whether to enable polishing after assembly (optional; self-polishing with long reads only if no short reads provided, otherwise 2+3 polishing)",
+				"visible": true,
+				"controlType": "bool",
+				"default": false
+			},
+			{
+                "key": "CycMetaAsmWorkflow.short_reads1",
+				"name": "短读段R1文件",
+				"name_en": "Short reads R1 file",
+				"required": false,
+				"type": "File",
+				"desc": "用于抛光的二代短读段测序数据R1文件（可选，与R2同时设置）",
+				"desc_en": "Short-read sequencing data R1 file for polishing (optional; should be set together with R2)",
+				"visible": true,
+				"controlType": "file"
+			},
+			{
+                "key": "CycMetaAsmWorkflow.short_reads2",
+				"name": "短读段R2文件",
+				"name_en": "Short reads R2 file",
+				"required": false,
+				"type": "File",
+				"desc": "用于抛光的二代短读段测序数据R2文件（可选，与R1同时设置）",
+				"desc_en": "Short-read sequencing data R2 file for polishing (optional; should be set together with R1)",
+				"visible": true,
+				"controlType": "file"
+			},
+			{
+				"key": "CycMetaAsmWorkflow.skani_database",
+				"name": "物种注释参考数据库",
+				"name_en": "Species annotation database",
+				"required": true,
+				"type": "File",
+				"desc": "物种注释参考数据库（文件夹路径）。",
+				"desc_en": "Species annotation reference database (folder path). ",
+				"visible": true,
+				"controlType": "file",
+				"default": ""
+			},
+            {
+                "key": "CycMetaAsmWorkflow.threads",
+                "name": "线程数",
+                "name_en": "Threads",
+                "required": false,
+                "type": "Int",
+                "desc": "分析使用的线程数",
+                "desc_en": "Number of threads used for analysis",
+                "visible": true,
+                "controlType": "int",
+                "default": 40
+            },
+			{
+				"key": "CycMetaAsmWorkflow.report_config_yaml",
+				"name": "报告配置文件",
+				"name_en": "Report config file",
+				"required": false,
+				"type": "File",
+				"desc": "报告模板配置文件（内部参数，对前端不可见）",
+				"desc_en": "Report template configuration file (internal parameter, hidden from frontend)",
+				"visible": false,
+				"controlType": "file",
+				"default": "./config/report_config.yaml"
+			},
+			{
+				"key": "CycMetaAsmWorkflow.sequencing_tech",
+				"name": "sequencing_tech",
+				"name_en": "sequencing_tech",
+				"required": false,
+				"type": "String",
+				"desc": "内部参数：测序平台类型，使用默认值即可",
+				"desc_en": "Internal parameter: sequencing technology, use default value",
+				"visible": false,
+				"controlType": "string",
+				"default": "CycloneSEQ"
+			},
+			{
+				"key": "CycMetaAsmWorkflow.assembler",
+				"name": "assembler",
+				"name_en": "assembler",
+				"required": false,
+				"type": "String",
+				"desc": "内部参数：组装软件类型，使用默认值即可",
+				"desc_en": "Internal parameter: assembler type, use default value",
+				"visible": false,
+				"controlType": "string",
+				"default": "metaflye"
+			},
+			{
+				"key": "CycMetaAsmWorkflow.checkm2_db_path",
+				"name": "checkm2_db_path",
+				"name_en": "checkm2_db_path",
+				"required": false,
+				"type": "File",
+				"desc": "内部参数：CheckM2 数据库根目录路径，由运行环境预先配置",
+				"desc_en": "Internal parameter: path of CheckM2 databases, pre-configured by runtime environment",
+				"visible": false,
+				"controlType": "file",
+				"default": "./database/CheckM2/uniref100.KO.1.dmnd"
+			},
+			{
+				"key": "CycMetaAsmWorkflow.classify_tool",
+				"name": "classify_tool",
+				"name_en": "classify_tool",
+				"required": false,
+				"type": "String",
+				"desc": "内部参数：MAG物种注释工具，使用默认值即可",
+				"desc_en": "Internal parameter: tool used for MAG taxonomic classification, use default value",
+				"visible": false,
+				"controlType": "string",
+				"default": "skani"
+			}
+		]
+	}
+}
+

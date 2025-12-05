@@ -1,0 +1,406 @@
+metadata:
+  title: "Metagenome-Assembled Genome (MAG) Analysis Report"
+  key:
+    url: "https://github.com/CycloneSEQ-Bioinformatics/cycloneseq-report-template"
+    title: "Metagenome-Assembled Genome (MAG) Analysis Report"
+    logo: true
+    version: "v1.0.0.0"
+    timestamp: ""
+
+body:
+  # =========================
+  # Section 1 – Sequencing Data Quality Control
+  # =========================
+  - section_1:
+      title:
+        zh: "测序数据质控"
+        en: "Sequencing Data Quality Control"
+      type: "h1"
+
+  - raw_qc_overview:
+      title:
+        zh: "原始测序数据质控总体统计信息"
+        en: "Raw Data Overall Quality Control Statistics"
+      type: "block"
+      style: "default"
+      description_1:
+        zh: "使用Rosa v0.2.14.0<sup>[1]</sup>对原始测序数据的质量信息进行统计，统计结果如下表所示。"
+        en: "Use Rosa v0.2.14.0<sup>[1]</sup> to summarize the quality metrics of raw sequencing data. The results are presented in the table below."
+      contents:
+        content_1:
+          type: "list"
+          style: "columns"
+          columns: 2
+          source: "raw_rosa_results/reference-free_QC_results_summary.tsv"
+          items:
+            total_sequences:
+              key:
+                zh: "总读段数"
+                en: "Total reads"
+              format: ",.0f"
+            total_bases:
+              key:
+                zh: "总碱基数 (bp)"
+                en: "Total bases (bp)"
+              format: ",.0f"
+            average_gc_content:
+              key:
+                zh: "平均GC含量 (%)"
+                en: "Average GC content (%)"
+              format: ".2f"
+            average_read_quality:
+              key:
+                zh: "平均读段质量"
+                en: "Average read quality"
+              format: ".2f"
+            read_N50:
+              key:
+                zh: "读段N50 (bp)"
+                en: "Read N50 (bp)"
+              format: ",.0f"
+            average_read_length:
+              key:
+                zh: "平均读段长度 (bp)"
+                en: "Average read length (bp)"
+              format: ".2f"
+            "≤1kb_read_proportion":
+              key:
+                zh: "<1kb读段占比"
+                en: "Proportion of ≤1kb reads"
+              format: ".2%"
+            "≤2kb_read_proportion":
+              key:
+                zh: "≤2kb读段占比"
+                en: "Proportion of ≤2kb reads"
+              format: ".2%"
+            "≤5kb_read_proportion":
+              key:
+                zh: "≤5kb读段占比"
+                en: "Proportion of ≤5kb reads"
+              format: ".2%"
+            "≤10kb_read_proportion":
+              key:
+                zh: "≤10kb读段占比"
+                en: "Proportion of ≤10kb reads"
+              format: ".2%"
+          description_1:
+            zh: "**总体统计信息说明**<br><br>- **total_sequences**：样本中测得的读段总数，用于衡量测序数据量。<br>- **total_bases**：所有读段碱基总和（bp），与测序深度密切相关。<br>- **average_gc_content**：读段的平均GC比例，可用于发现文库构建或样本组成的异常。<br>- **average_read_quality**：按 Phred 质量值计算得到的读段平均质量，值越高代表错误率越低（Q = -10 × log10(P)，P 为错误率）。<br>- **read_N50** 与 **average_read_length**：用于评价读段长度分布和长读段占比，N50 越大通常对后续组装越有利。<br>- 不同读长阈值的读段比例（≤1kb/≤2kb/≤5kb/≤10kb/≤50kb）可帮助评估长读段数据的充足程度。"
+            en: "**Explanation of summary metrics**<br><br>- **total_sequences**: total number of reads in the sample, reflecting overall sequencing yield.<br>- **total_bases**: sum of all bases (bp) across reads, closely related to effective sequencing depth.<br>- **average_gc_content**: mean GC fraction of reads, useful for detecting abnormal library composition or contamination.<br>- **average_read_quality**: mean Phred-based read quality; higher values indicate lower error rates (Q = -10 × log10(P), where P is the error probability).<br>- **read_N50** and **average_read_length**: characterize the read length distribution and contribution of long reads, where larger N50 is generally favorable for downstream assembly.<br>- Read proportions under multiple length thresholds (≤1 kb/≤2 kb/≤5 kb/≤10 kb/≤50 kb) help assess whether long reads are sufficient for assembly."
+        content_2:
+          type: "image"
+          source: "raw_rosa_results/read_length_distribution.png"
+          width: "60%"
+          description_1:
+            zh: "**读长长度分布情况**<br> <br> <br>- **横坐标（x轴）**表示读段的长度。<br>- **纵坐标（y轴）**表示具有该长度的读段的数量。"
+            en: "**Length distribution of long-read sequencing data**<br> <br> <br>- **The y-axis** represents the number of reads at each length.<br>- **The dashed line** indicates the mean of the distribution."
+        content_3:
+          type: "image"
+          source: "raw_rosa_results/read_quality_distribution.png"
+          width: "60%"
+          description_1:
+            zh: "**碱基质量分布情况**<br> <br> <br>- **横坐标（x轴）**表示单个读段的平均 Phred 质量值。<br>- **纵坐标（y轴）**表示对应质量值范围内的读段数量（频数）。<br> 每条读段的整体质量值（Phred Q）由其所有碱基的质量值计算得出：<br> Q = -10 * log10(P)，其中 P 是错误率。"
+            en: "**Base quality distribution of long-read sequencing data**<br> <br> <br>- **The x-axis** represents the average Phred quality score per read. <br>- **The y-axis** indicates the number (frequency) of reads within each quality score bin.<br>The overall quality score (Phred Q) of each read is calculated from the quality values of all its bases: <br> Q = -10 * log10(P), where P is the error rate."
+        content_4:
+          type: "image"
+          source: "raw_rosa_results/cumulative_read_length.png"
+          width: "60%"
+          description_1:
+            zh: "**累积读长曲线**<br> <br> <br>- **横坐标（x轴）**表示最小读段长度（bp），即当前所考虑的读段长度累计阈值。<br>- **纵坐标（y轴）**表示当前所考虑的读段长度阈值下的所有读段碱基总数占全部碱基量的百分比。<br> 虚线标注了N50长度，即一半的总碱基来自长度不小于该值的读段。"
+            en: "**Cumulative read length curve of long-read sequencing data**<br> <br> <br>- **The x-axis** represents the minimum read length threshold n (bp).<br>- **The y-axis** indicates the cumulative fraction of total bases contributed by reads with length ≥ n.<br>The dashed vertical line indicates the read N50 position, at which reads of length ≥N50 contribute 50% of all bases."
+        content_5:
+          type: "image"
+          source: "raw_rosa_results/read_length_vs_quality.png"
+          width: "60%"
+          description_1:
+            zh: "**读长长度与碱基质量分布图**<br> <br> <br>- **横坐标（x轴）**表示读段长度。<br>- **纵坐标（y轴）**表示读段质量值。<br>- **颜色深浅**表示该位置（对应长度与质量）读段的密度，密集度越高颜色越深。"
+            en: "**Read Length vs. Base Quality Distribution**<br> <br> <br>- **The x-axis** denotes read length.<br>- **The y-axis** denotes read quality score.<br>- **The color intensity** reflects the density of reads at each length–quality combination, with darker hues indicating higher density."
+  - clean_qc_overview:
+      title:
+        zh: "清洗后测序数据质控总体统计信息"
+        en: "Cleaned Data Overall Quality Control Statistics"
+      type: "block"
+      style: "default"
+      description_1:
+        zh: "使用Rosa v0.2.14.0<sup>[1]</sup>对清洗后测序数据的质量信息进行统计，统计结果如下表所示。"
+        en: "Use Rosa v0.2.14.0<sup>[1]</sup> to summarize the quality metrics of cleaned sequencing data. The results are presented in the table below."
+      contents:
+        content_1:
+          type: "list"
+          style: "columns"
+          columns: 2
+          source: "clean_rosa_results/reference-free_QC_results_summary.tsv"
+          items:
+            total_sequences:
+              key:
+                zh: "总读段数"
+                en: "Total reads"
+              format: ",.0f"
+            total_bases:
+              key:
+                zh: "总碱基数 (bp)"
+                en: "Total bases (bp)"
+              format: ",.0f"
+            average_gc_content:
+              key:
+                zh: "平均GC含量 (%)"
+                en: "Average GC content (%)"
+              format: ".2f"
+            average_read_quality:
+              key:
+                zh: "平均读段质量"
+                en: "Average read quality"
+              format: ".2f"
+            read_N50:
+              key:
+                zh: "读段N50 (bp)"
+                en: "Read N50 (bp)"
+              format: ",.0f"
+            average_read_length:
+              key:
+                zh: "平均读段长度 (bp)"
+                en: "Average read length (bp)"
+              format: ".2f"
+            "≤1kb_read_proportion":
+              key:
+                zh: "<1kb读段占比"
+                en: "Proportion of ≤1kb reads"
+              format: ".2%"
+            "≤2kb_read_proportion":
+              key:
+                zh: "≤2kb读段占比"
+                en: "Proportion of ≤2kb reads"
+              format: ".2%"
+            "≤5kb_read_proportion":
+              key:
+                zh: "≤5kb读段占比"
+                en: "Proportion of ≤5kb reads"
+              format: ".2%"
+            "≤10kb_read_proportion":
+              key:
+                zh: "≤10kb读段占比"
+                en: "Proportion of ≤10kb reads"
+              format: ".2%"
+          description_1:
+            zh: "**总体统计信息说明**<br><br>- **total_sequences**：样本中测得的读段总数，用于衡量测序数据量。<br>- **total_bases**：所有读段碱基总和（bp），与测序深度密切相关。<br>- **average_gc_content**：读段的平均GC比例，可用于发现文库构建或样本组成的异常。<br>- **average_read_quality**：按 Phred 质量值计算得到的读段平均质量，值越高代表错误率越低（Q = -10 × log10(P)，P 为错误率）。<br>- **read_N50** 与 **average_read_length**：用于评价读段长度分布和长读段占比，N50 越大通常对后续组装越有利。<br>- 不同读长阈值的读段比例（≤1kb/≤2kb/≤5kb/≤10kb/≤50kb）可帮助评估长读段数据的充足程度。"
+            en: "**Explanation of summary metrics**<br><br>- **total_sequences**: total number of reads in the sample, reflecting overall sequencing yield.<br>- **total_bases**: sum of all bases (bp) across reads, closely related to effective sequencing depth.<br>- **average_gc_content**: mean GC fraction of reads, useful for detecting abnormal library composition or contamination.<br>- **average_read_quality**: mean Phred-based read quality; higher values indicate lower error rates (Q = -10 × log10(P), where P is the error probability).<br>- **read_N50** and **average_read_length**: characterize the read length distribution and contribution of long reads, where larger N50 is generally favorable for downstream assembly.<br>- Read proportions under multiple length thresholds (≤1 kb/≤2 kb/≤5 kb/≤10 kb/≤50 kb) help assess whether long reads are sufficient for assembly."
+        content_2:
+          type: "image"
+          source: "clean_rosa_results/read_length_distribution.png"
+          width: "60%"
+          description_1:
+            zh: "**读长长度分布情况**<br> <br> <br>- **横坐标（x轴）**表示读段的长度。<br>- **纵坐标（y轴）**表示具有该长度的读段的数量。"
+            en: "**Length distribution of long-read sequencing data**<br> <br> <br>- **The y-axis** represents the number of reads at each length.<br>- **The dashed line** indicates the mean of the distribution."
+        content_3:
+          type: "image"
+          source: "clean_rosa_results/read_quality_distribution.png"
+          width: "60%"
+          description_1:
+            zh: "**碱基质量分布情况**<br> <br> <br>- **横坐标（x轴）**表示单个读段的平均 Phred 质量值。<br>- **纵坐标（y轴）**表示对应质量值范围内的读段数量（频数）。<br> 每条读段的整体质量值（Phred Q）由其所有碱基的质量值计算得出：<br> Q = -10 * log10(P)，其中 P 是错误率。"
+            en: "**Base quality distribution of long-read sequencing data**<br> <br> <br>- **The x-axis** represents the average Phred quality score per read. <br>- **The y-axis** indicates the number (frequency) of reads within each quality score bin.<br>The overall quality score (Phred Q) of each read is calculated from the quality values of all its bases: <br> Q = -10 * log10(P), where P is the error rate."
+        content_4:
+          type: "image"
+          source: "clean_rosa_results/cumulative_read_length.png"
+          width: "60%"
+          description_1:
+            zh: "**累积读长曲线**<br> <br> <br>- **横坐标（x轴）**表示最小读段长度（bp），即当前所考虑的读段长度累计阈值。<br>- **纵坐标（y轴）**表示当前所考虑的读段长度阈值下的所有读段碱基总数占全部碱基量的百分比。<br> 虚线标注了N50长度，即一半的总碱基来自长度不小于该值的读段。"
+            en: "**Cumulative read length curve of long-read sequencing data**<br> <br> <br>- **The x-axis** represents the minimum read length threshold n (bp).<br>- **The y-axis** indicates the cumulative fraction of total bases contributed by reads with length ≥ n.<br>The dashed vertical line indicates the read N50 position, at which reads of length ≥N50 contribute 50% of all bases."
+        content_5:
+          type: "image"
+          source: "clean_rosa_results/read_length_vs_quality.png"
+          width: "60%"
+          description_1:
+            zh: "**读长长度与碱基质量分布图**<br> <br> <br>- **横坐标（x轴）**表示读段长度。<br>- **纵坐标（y轴）**表示读段质量值。<br>- **颜色深浅**表示该位置（对应长度与质量）读段的密度，密集度越高颜色越深。"
+            en: "**Read Length vs. Base Quality Distribution**<br> <br> <br>- **The x-axis** denotes read length.<br>- **The y-axis** denotes read quality score.<br>- **The color intensity** reflects the density of reads at each length–quality combination, with darker hues indicating higher density."
+
+  # =========================
+  # Section 2 – Assembly Quality Assessment
+  # =========================
+  - section_2:
+      title:
+        zh: "组装质量评估"
+        en: "Assembly Quality Assessment"
+      type: "h1"
+
+  - mag_quality_overall:
+      title:
+        zh: "宏组装基因组质量总体统计"
+        en: "Overall MAG Quality Statistics"
+      type: "block"
+      style: "default"
+      description_1:
+        zh:
+          "使用Flye v2.9.6<sup>[2]</sup>和Semibin 2.2.0<sup>[3]</sup>进行基因组组装和分箱。使用CheckM2 v1.1.0<sup>[4]</sup>评估获得的宏组装基因组（MAG）质量。<br><br>根据**完整度（Completeness）**与**污染度（Contamination）**及其他规则对 MAG 进行质量分级与排序：<br>
+          - **高质量（High）**：Completeness >= 90% & Contamination <= 5%。<br>
+          - **中质量（Medium）**：Completeness >= 50% & Contamination <= 10%。<br>
+          - **低质量（Low）**：当质量分数 < 50 或 contig 数量 > 2,000。<br>
+          质量分数（quality score）定义为 completeness - 5 * contamination<sup>[5]</sup>。"
+        en:
+          "MAG are classified and ranked by completeness, contamination, and additional rules:<br>
+          - **High quality**: completeness >= 90% and contamination <= 5%.<br>
+          - **Medium quality**: completeness >= 50% and contamination <= 10%.<br>
+          - **Low quality**: quality score < 50 or those containing > 2,000 contigs.<br>
+          The quality score is defined as completeness - 5 * contamination."
+      contents:
+        mag_quality_table:
+          type: "list"
+          style: "columns"
+          columns: 3
+          source: "quality_stats.tsv"
+          description_1:
+            zh: "**宏组装基因组质量统计表**<br>高质量 MAG 满足较高的完整度（例如 ≥90%）和较低的污染度（例如 ≤5%）；中质量 MAG 具有中等完整度与可接受污染度。"
+            en: "**Quality statistics of metagenome-assembled genomes**<br>High-quality MAGs meet stringent criteria for completeness (e.g., ≥90%) and low contamination (e.g., ≤5%); medium-quality MAGs exhibit moderate completeness and acceptable contamination levels."
+          items:
+            High_MAGs:
+              key:
+                zh: "高质量 MAG 数量"
+                en: "Number of High-quality MAGs"
+              format: ",.0f"
+            Medium_MAGs:
+              key:
+                zh: "中质量 MAG 数量"
+                en: "Number of Medium-quality MAGs"
+              format: ",.0f"
+            All_MAGs:
+              key:
+                zh: "全部 MAG 数量"
+                en: "Total Number of MAGs"
+              format: ",.0f"
+            High_Genome_Size:
+              key:
+                zh: "高质量 MAG 基因组总大小 (bp)"
+                en: "Total Genome Size of High-quality MAGs (bp)"
+              format: ",.0f"
+            Medium_Genome_Size:
+              key:
+                zh: "中质量 MAG 基因组总大小 (bp)"
+                en: "Total Genome Size of Medium-quality MAGs (bp)"
+              format: ",.0f"
+            All_Genome_Size:
+              key:
+                zh: "全部 MAG 基因组总大小 (bp)"
+                en: "Total Genome Size of All MAGs (bp)"
+              format: ",.0f"
+          description_2:
+            zh: "中高质量基因组的比例越高，说明组装与分箱效果越好，适合后续的功能注释与生态学分析。<br>不同样本类型与复杂度可能导致组装与分箱结果差异较大，中高质量基因组的比例会出现较大波动。"
+            en: "A higher proportion of medium- and high-quality genomes indicates better assembly and binning performance, suitable for downstream functional annotation and ecological analysis.<br>Different sample types and complexities may lead to significant variations in assembly and binning results, causing fluctuations in the proportion of medium- and high-quality genomes."
+
+  - mag_rank_plot:
+      title:
+        zh: "Completeness 与 Contamination 排名图"
+        en: "Completeness & Contamination Rank Plot"
+      type: "block"
+      style: "default"
+      description_1:
+        zh: "**Completeness / Contamination 排名图**<br><br>- 左侧子图：Completeness 排名（降序），纵轴为完整度（%），横轴为 MAG 排名。曲线平缓并接近 100% 表明大部分 MAG 完整度较高。<br>- 右侧子图：Contamination 排名（升序），纵轴为污染度（%），横轴为 MAG 排名。曲线在低污染区间内较为平坦，说明大部分 MAG 污染度较低。"
+        en: "The **completeness rank curve** and **contamination rank curve** visually present the genome completeness and contamination of MAGs.<br>Completeness is ranked from high to low, while contamination is ranked from low to high, with MAG rank on the x-axis."
+      contents:
+        rank_completeness_contamination:
+          type: "image"
+          source: "rank_completeness_contamination.png"
+          width: "80%"
+      description_2:
+        zh: "**高完整度 + 低污染度**的 MAG 更适合作为后续功能注释与生态学分析的对象，故只绘制了非低质量（即高质量与中质量）MAG 的排名曲线。"
+        en: "**High completeness + low contamination** MAGs are more suitable for downstream functional annotation and ecological analysis; therefore, only non-low-quality (i.e., high- and medium-quality) MAGs are plotted here."
+
+  - contig_n50_violin:
+      title:
+        zh: "Contig N50 分布"
+        en: "Contig N50 Distribution"
+      type: "block"
+      style: "default"
+      description_1:
+        zh: "小提琴图反映基因组组装的Contig N50 分布情况, 可用于评估不同 MAG 的组装连续性。"
+        en: "The violin plot illustrates the distribution of contig N50 values across MAGs, serving as an indicator of assembly continuity."
+      contents:
+        contig_n50_violin_plot:
+          type: "image"
+          source: "contig_n50_violin.png"
+          width: "60%"
+      description_2:
+        zh: "低质量MAG 不适合作为后续功能注释与生态学分析的对象，故只展示中高质量 MAG 的 Contig N50 分布情况。"
+        en: "Low-quality MAGs are not suitable for downstream functional annotation and ecological analysis; therefore, only medium- and high-quality MAGs are presented here."
+
+  - mag_summary:
+      title:
+        zh: "Top MAG 概览表"
+        en: "Summary of Top-ranked MAGs"
+      type: "block"
+      style: "highlight"
+      description_1:
+        zh: "本表展示代表性前20位的中高质量 MAG 的综合质量、物种分类以及丰度信息，<br>- **Quality rank**：MAG的质量评估等级。<br>- **Completeness / Contamination**：MAG的完整度与污染度评估。<br>- **Total Contigs / Genome Size / Contig N50**：MAG包含contig数量、碱基数和contig N50。<br>- **Reference**：与MAG最相似的参考基因组。<br>- **ANI**：与参考基因组的平均核苷酸一致性（%），用于衡量与参考基因组的相似程度。<br>- **Taxonomy及各分类层级列**：该MAG的物种分类结果<br>- **Taxonomic abundance(%) / Sequence abundance(%)**：分别表示分析数据中该MAG的核酸序列相对丰度和物种分类相对丰度。<br>全部MAG的详细信息见`summary.tsv`。中高质量 MAG 序列位于结果包中的 `passed_quality_mags` 目录，而低质量 MAG 序列位于 `low_quality_mags` 目录。"
+        en: "This table presents a comprehensive overview of the top 20 representative medium- and high-quality MAGs, including:<br>- **Quality rank**: quality assessment level of the MAG.<br>- **Completeness / Contamination**: estimates of genome completeness and contamination.<br>- **Total Contigs / Genome Size / Contig N50**: number of contigs, total bases, and contig N50 of the MAG.<br>- **Reference**: the most similar reference genome to the MAG.<br>- **ANI**: average nucleotide identity (%) to reference genomes, indicating similarity levels.<br>- **Taxonomy and taxonomic rank columns**: taxonomic classification results of the MAG.<br>- **Taxonomic abundance(%) / Sequence abundance(%)**: relative abundances of the MAG based on taxonomic classification and sequencing depth, respectively.<br>For detailed information on all MAGs, refer to `summary.tsv`. High & medium-quality MAG sequences are located in the `passed_quality_mags` directory within the results package, while low-quality MAG sequences are in the `low_quality_mags` directory."
+      contents:
+        top_mag_table:
+          type: "table"
+          source: "top_ranked_mag_summary.tsv"
+          highlight_index_column: true
+          format_columns:
+            Completeness:
+              format: ".2f"
+            Contamination:
+              format: ".2f"
+            "Total Contigs":
+              format: ".0f"
+            "Genome Size":
+              format: ",.0f"
+            "Contig N50":
+              format: ",.0f"
+            ANI:
+              format: ".2f"
+            "Taxonomic abundance(%)":
+              format: ".4f"
+            "Sequence abundance(%)":
+              format: ".4f"
+      description_2:
+        zh: "中高质量MAG代表性排序根据质量分数公式(completeness - 5 * contamination)降序得到。**物种分类结果仅在提供物种识别参考数据时生成。**"
+        en: "The ranking of representative medium- and high-quality MAGs is determined by descending order of the quality score formula (completeness - 5 * contamination).**Taxonomic classification results are generated only when species identification reference data is provided.**"
+
+  # =========================
+  # Section 3 – Microbial Composition
+  # =========================
+  - section_3:
+      title:
+        zh: "微生物群落组成"
+        en: "Microbial Composition"
+      type: "h1"
+
+  - taxonomic_sunburst:
+      title:
+        zh: "物种相对丰度旭日图"
+        en: "Species Abundance Sunburst Chart"
+      type: "block"
+      style: "default"
+      description_1:
+        zh: "使用旭日图对群落结构进行可视化，展示样本中各类微生物在不同分类学层级上的丰度分布。<br>可通过鼠标悬停与点击查看不同层级（如门、纲、目、科、属、种）的丰度。"
+        en: "The sunburst chart visualizes the community structure by displaying the abundance distribution of various microbes across taxonomic ranks in the sample. Users can hover and click to explore abundances at different levels (e.g., phylum, class, order, family, genus, species)."
+      contents:
+        taxonomic_abundance_html:
+          type: "html"
+          source: "taxonomic_abundance.html"
+          width: "100%"
+          height: "800px"
+      description_2:
+        zh: "**Sunburst 图解读提示**<br><br>- 内圈代表较高层级（如 Domain/Phylum），由内向外依次为更细粒度的分类单元。<br>- 扇形面积与颜色通常分别表示相对丰度和分类单元间丰度差异，面积越大表示该类群在样本中所占比例越高，颜色差异越大表示该类群相对其他物种占比差异更大。<br>- 可通过点击某一扇区进行放大查看其子类群，便于聚焦于特定门或属的组成。**仅在提供物种识别参考数据时，本图才会生成。**"
+        en: "**Tips for interpreting the sunburst chart**<br><br>- The inner rings represent higher taxonomic ranks (e.g., Domain/Phylum), progressing outward to finer taxonomic units.<br>- The area and color of each sector typically represent relative abundance and abundance differences among taxa, respectively; larger areas indicate higher proportions in the sample, while more distinct colors signify greater abundance differences compared to other taxa.<br>- Users can click on a sector to zoom in and explore its subgroups, facilitating focused examination of specific phyla or genera.**This chart is generated only when species identification reference data is provided.**"
+
+  # =========================
+  # Section 4 – References
+  # =========================
+  - section_4:
+      title:
+        zh: "参考文献"
+        en: "References"
+      type: "h1"
+
+  - references:
+      title:
+        zh: ""
+        en: ""
+      type: "block"
+      style: "default"
+      description_1:
+        zh: "[1] https://github.com/CycloneSEQ-Bioinformatics/Rosa<br>[2] Kolmogorov, M., Bickhart, D.M., Behsaz, B. et al. metaFlye: scalable long-read metagenome assembly using repeat graphs. Nat Methods 17, 1103–1110 (2020). https://doi.org/10.1038/s41592-020-00971-x<br>[3] Pan, S.; Zhu, C.; Zhao, XM.; Coelho, LP. A deep siamese neural network improves metagenome-assembled genomes in microbiome datasets across different environments. Nat Commun 13, 2326 (2022). https://doi.org/10.1038/s41467-022-29843-y<br>[4] Chklovski, A., Parks, D.H., Woodcroft, B.J. et al. CheckM2: a rapid, scalable and accurate tool for assessing microbial genome quality using machine learning. Nat Methods 20, 1203–1212 (2023). https://doi.org/10.1038/s41592-023-01940-w<br>[5] https://gtdb.ecogenomic.org/faq#why-do-some-family-and-other-higher-taxon-names-end-with-an-alphabetic-suffix"
+        en: "[1] https://github.com/CycloneSEQ-Bioinformatics/Rosa<br>[2] Kolmogorov, M., Bickhart, D.M., Behsaz, B. et al. metaFlye: scalable long-read metagenome assembly using repeat graphs. Nat Methods 17, 1103–1110 (2020). https://doi.org/10.1038/s41592-020-00971-x<br>[3] Pan, S.; Zhu, C.; Zhao, XM.; Coelho, LP. A deep siamese neural network improves metagenome-assembled genomes in microbiome datasets across different environments. Nat Commun 13, 2326 (2022). https://doi.org/10.1038/s41467-022-29843-y<br>[4] Chklovski, A., Parks, D.H., Woodcroft, B.J. et al. CheckM2: a rapid, scalable and accurate tool for assessing microbial genome quality using machine learning. Nat Methods 20, 1203–1212 (2023). https://doi.org/10.1038/s41592-023-01940-w<br>[5] https://gtdb.ecogenomic.org/faq#why-do-some-family-and-other-higher-taxon-names-end-with-an-alphabetic-suffix"
+      contents:
+        content_1:
+          type: "empty"

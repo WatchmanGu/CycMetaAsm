@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "CycMetaAsm"
+version = "0.1.0"
+description = "Refactored CLI toolkit for the Cyc metagenomic assembly workflow"
+authors = [{name = "CycMetaAsm Maintainers"}]
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+dependencies = [
+    "biopython",
+    "pandas",
+    "numpy",
+    "matplotlib",
+    "seaborn",
+    "plotly",
+    
+]
+
+[project.scripts]
+cycmetaasm = "CycMetaAsm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
