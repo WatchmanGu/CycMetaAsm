@@ -1,5 +1,4 @@
 version 1.0
-
 task preprocess {
   input {
     File input_fastq
@@ -8,13 +7,36 @@ task preprocess {
     Int min_length = 1000
     Int min_quality = 10
     File? host_reference
-    String? downsample
+    Float? downsample
   }
 
-  command <<<
+  command <<< 
     set -euo pipefail
 
     mkdir -p work
+
+    #
+    # Handle downsample logic in bash
+    #
+    DS_FLAG=""
+    if [[ ~{defined(downsample)} == "true" ]]; then
+        ds="~{downsample}"
+
+        # Case 1: Value < 0.1 → Only warn, do not apply downsampling
+        awk_res=$(awk -v v="$ds" 'BEGIN {if (v < 0.1) print "lt"; else print "ge"}')
+        if [[ "$awk_res" == "lt" ]]; then
+            echo "[WARNING] The sampled data volume is too small; assembly may fail!" >&2
+            # Do NOT enable downsampling
+        else
+            # Case 2: Value == 0 → Disable downsampling
+            if awk -v v="$ds" 'BEGIN {exit !(v == 0)}'; then
+                echo "[INFO] Downsample value is 0; downsampling disabled."
+            else
+                # Case 3: Normal downsampling
+                DS_FLAG="--downsample ${ds}G"
+            fi
+        fi
+    fi
 
     cycmetaasm preprocess ~{input_fastq} work \
       --threads ~{threads} \
@@ -22,7 +44,7 @@ task preprocess {
       --min-length ~{min_length} \
       --min-quality ~{min_quality} \
       ~{if defined(host_reference) then "--host-reference " + host_reference else ""} \
-      ~{if defined(downsample) then "--downsample " + downsample else ""}
+      "${DS_FLAG}"
 
     cp ~{if defined(host_reference) then "work/remove_host/host_removed.fastq.gz" else "work/qc/filtered.fastq.gz"} clean.fastq.gz
   >>>
@@ -37,6 +59,7 @@ task preprocess {
     memory: "80G"
   }
 }
+
 
 
 task RunRosa{

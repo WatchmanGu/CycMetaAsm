@@ -22,7 +22,7 @@ workflow CycMetaAsmWorkflow {
     File? short_reads1
     File? short_reads2
     File? host_reference
-    String? downsample
+    Float? downsample
     String binning_mode = "global"
     String classify_tool = "skani"
   }

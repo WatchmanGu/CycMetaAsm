@@ -104,14 +104,14 @@
 			},
             {
                 "key": "CycMetaAsmWorkflow.downsample",
-				"name": "随机抽样数据量",
-				"name_en": "Random sampling bases",
+				"name": "随机抽样数据量（Gb）",
+				"name_en": "Random sampling bases (Gb)",
 				"required": false,
-				"type": "String",
-				"desc": "在分析前对原始数据随机抽取的总碱基数（bp），空则不抽取",
-				"desc_en": "Total bases (bp) to randomly retain before analysis; no sampling if unset",
+				"type": "Float",
+				"desc": "在分析前对原始数据随机抽取的总碱基数（Gbp），空则不抽取",
+				"desc_en": "Total bases (Gbp) to randomly retain before analysis; no sampling if unset",
 				"visible": true,
-				"controlType": "string"
+				"controlType": "float"
 			},
             {
                 "key": "CycMetaAsmWorkflow.host_reference",
