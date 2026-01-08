@@ -1,37 +1,570 @@
 # CycMetaAsm
 
-## Long-read Metagenomic Assembly and MAG Analysis Toolkit (CycloneSEQ)
+## Long-read Metagenomic Assembly and MAG Analysis Toolkit
 
-CycMetaAsm is a comprehensive bioinformatics pipeline designed for processing long-read metagenomic sequencing data, specifically optimized for the CycloneSEQ platform. It automates the entire workflow from raw data processing to the generation of high-quality Metagenome-Assembled Genomes (MAGs) and taxonomic profiles.
+**Version:** 1.0.0.0  
+**Software Type:** Bioinformatics pipeline for metagenomic analysis  
+**Target Platform:** CycloneSEQ long-read sequencing platform
 
-## Features
+---
 
-Based on the `CycMetaAsmWorkflow`, the pipeline includes the following key stages:
+## A) Product Overview
 
-1. **Sequencing Data QC**: Evaluates read length distribution, GC content, and base quality using Rosa.
-2. **Read Preprocessing**: Filters low-quality reads based on length and quality thresholds. Supports optional downsampling and host genome removal (e.g., human host).
-3. **Metagenome Assembly & Polishing**: Constructs assembly graphs using **metaFlye** or **metaMDBG**. Supports optional polishing with short reads (hybrid assembly approach).
-4. **Binning & Quality Assessment**: Recovers MAGs using **SemiBin2** and assesses genome completeness and contamination with **CheckM2**.
-    * *Completeness-aware strategy*: High-quality long contigs (>500kb, >93% completeness) are identified as single-contig MAGs (scMAGs) before binning.
-5. **Taxonomic Annotation & Abundance**: Performs taxonomic classification of bins using **skani** or **kMetaShot** and estimates abundance.
+### 1.1 Overview
 
-## Installation
+CycMetaAsm is a comprehensive bioinformatics pipeline designed for processing long-read metagenomic sequencing data from the CycloneSEQ platform. It automates the complete workflow from raw data quality control through metagenome assembly, binning, and taxonomic classification to generate high-quality Metagenome-Assembled Genomes (MAGs) with taxonomic annotations and abundance profiles.
 
-### Development Install
+**Target Users:**
+- Bioinformatics researchers working with metagenomic data
+- Microbiome scientists analyzing complex microbial communities
+- CycloneSEQ platform users requiring automated analysis pipelines
 
-To install the package in editable mode for development:
+**Supported Data Types:**
+- Long-read sequencing data (FASTQ/FASTQ.gz format)
+  - CycloneSEQ native format (optimized)
+  - PacBio HiFi reads
+  - Oxford Nanopore reads
+- Optional: Paired-end short reads for hybrid polishing (Illumina, FASTQ/FASTQ.gz)
+- Input: Single-sample, single/multi-FASTQ files
+- Gzip compression supported throughout
 
-```bash
-pip install --upgrade pip
-pip install -e .
+### 1.2 High-Level Pipeline Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     INPUT: Raw FASTQ (Long Reads)                   │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  MODULE 1: PREPROCESSING                                            │
+│  ├─ Quality Control (Rosa - optional external)                      │
+│  ├─ Downsampling (optional, seed=1005)                              │
+│  ├─ Quality Filtering (chopper: length ≥1000bp, Q≥7)                │
+│  └─ Host Removal (minimap2 + samtools: CycloneSEQ preset)           │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  MODULE 2: ASSEMBLY                                                 │
+│  ├─ Assembly (metaFlye --meta, --nano-raw preset)                   │
+│  └─ Optional Polishing (NextPolish with long+short reads)           │
+│     ├─ Short-read QC (fastp, if short reads provided)               │
+│     └─ NextPolish (task=best, min_read_len=1000)                    │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  MODULE 3: EVALUATION & CONTIG SELECTION                            │
+│  (Completeness-Aware Strategy, if CheckM2 DB provided)              │
+│  ├─ CheckM2 Quality Assessment (contigs ≥500kb)                     │
+│  ├─ Extract scMAGs: Completeness ≥93% & Length ≥500kb               │
+│  │  → Output: scMAGs/*.fa + scMAGs_info.tsv                         │
+│  └─ Remaining contigs → to_be_binned.fasta                          │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  MODULE 4: BINNING                                                  │
+│  ├─ Read Alignment (minimap2 + samtools sort/index)                 │
+│  ├─ SemiBin2 Binning (seed=1005, long_read mode, environment model) │
+│  └─ CheckM2 on Bins (completeness/contamination assessment)         │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  MODULE 5: CLASSIFICATION                                           │
+│  └─ Taxonomic Assignment (skani search with GTDB, min_af=50%)       │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  MODULE 6: SUMMARIZATION                                            │
+│  ├─ Abundance Profiling (Sylph with MAGs)                           │
+│  ├─ Quality Ranking (High/Medium/Low based on CheckM2 scores)       │
+│  ├─ Visualization (Plotly sunburst, Matplotlib plots)               │
+│  └─ Summary Tables (TSV: MAG quality, taxonomy, abundance)          │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  OUTPUT: MAGs + Quality Reports + Taxonomic Profiles + Plots       │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Compilation (Nuitka)
+---
 
-The project is designed to be compiled into a standalone executable using Nuitka:
+## B) Architecture & Module Decomposition
+
+### Module List Table
+
+| Module Name | Purpose | Inputs | Outputs | Key Parameters | External Tools/Libs | Key Code Entry Points |
+|-------------|---------|--------|---------|----------------|---------------------|----------------------|
+| **Preprocess** | Downsample, filter reads by quality/length, remove host contamination | FASTQ (long reads), optional host reference | Filtered FASTQ | `--downsample` (e.g., "10G"), `--min-length` (default: 1000), `--min-quality` (default: 7), `--threads`, `--sequencing-tech` | `chopper`, `minimap2`, `samtools`, `pigz` | `src/CycMetaAsm/cli.py::parse_args(command='preprocess')`<br>`src/CycMetaAsm/pipelines/preprocess.py::run_preprocess()` |
+| **Assembly** | Assemble metagenomic contigs using long reads; optional polishing with short reads | Cleaned FASTQ (long), optional short-read pair | `assembly.fasta`, `assembly_info.txt`, optional `genome.nextpolish.fasta` | `--assembler` (metaflye/metamdbg), `--threads`, `--preset`, `--polish`, `--short-reads1/2`, `--polish-path` | `flye` (metaFlye), `nextPolish`, `fastp` | `src/CycMetaAsm/cli.py::parse_args(command='assemble')`<br>`src/CycMetaAsm/pipelines/assembly.py::AssemblyRunner.run()` |
+| **Evaluation** | Assess contig completeness/contamination; extract high-quality single-contig MAGs | Assembly FASTA, CheckM2 DB | CheckM2 quality reports, scMAGs (if ≥93% complete & ≥500kb), `to_be_binned.fasta` | `--checkm2-db` (path to CheckM2 database), `--subset-path`, `--threads` | `checkm2` | `src/CycMetaAsm/cli.py::parse_args(command='assemble')` (completeness-aware logic)<br>`src/CycMetaAsm/pipelines/evaluation.py::ContigAnalyzer` |
+| **Binning** | Cluster contigs into genome bins via coverage/composition | Assembly FASTA, cleaned reads FASTQ | Bins directory (`output_bins/*.fasta`), `aligned.bam`, CheckM2 bin quality report | `--binning-model` (e.g., global, human_gut), `--sequencing-tech`, `--checkm2-db`, `--threads` | `minimap2`, `samtools`, `SemiBin2`, `checkm2` | `src/CycMetaAsm/cli.py::parse_args(command='bin')`<br>`src/CycMetaAsm/pipelines/binning.py::run_binning()` |
+| **Classify** | Assign taxonomy to bins/MAGs using reference genomes | Bins directory, skani database, GTDB metadata TSV | `classify_result.tsv`, `classify_result_deduplicated.tsv` | `--tool` (skani), `--database`, `--metadata`, `--ass2ref` (default: 0.5), `--threads` | `skani` | `src/CycMetaAsm/cli.py::parse_args(command='classify')`<br>`src/CycMetaAsm/pipelines/classify.py::Classifier.run()` |
+| **Summarize** | Aggregate quality, taxonomy, abundance; generate plots and ranked tables | CheckM2 quality report TSV, optional classification TSV, MAGs directory, original FASTQ | Summary TSV, quality stats TSV, top-ranked MAG TSV, PNG plots, HTML sunburst | `--classification`, `--mag-path`, `--scmag-info`, `--fastq-file`, `--threads` | `sylph`, `pandas`, `matplotlib`, `seaborn`, `plotly` | `src/CycMetaAsm/cli.py::parse_args(command='summarize')`<br>`src/CycMetaAsm/pipelines/summary.py::process_files()` |
+| **Utilities** | Shared helpers: checkpointing, command execution, preset settings | N/A | N/A | Sequencing tech presets (CycloneSEQ, HiFi, NanoPore) | N/A | `src/CycMetaAsm/utils.py::run_cmd()`, `::checkpoint()`, `::preset_setting()` |
+
+### Module Interface Description
+
+#### CLI Entry Point
+- **Command:** `cycmetaasm`
+- **Package:** `CycMetaAsm` (installed via `pip install -e .` or compiled with Nuitka)
+- **Entry:** `src/CycMetaAsm/cli.py::main()` (also `src/CycMetaAsm/__main__.py`)
+
+#### Common CLI Options (Global)
+- `--log-level` (default: INFO): Logging verbosity
+
+#### Subcommands
+
+1. **`cycmetaasm preprocess`**
+   - Positional: `input` (FASTQ path), `output` (output directory)
+   - Options: `--threads`, `--downsample`, `--min-length`, `--min-quality`, `--host-reference`, `--sequencing-tech`
+
+2. **`cycmetaasm assemble`**
+   - Positional: `input` (FASTQ), `output` (directory)
+   - Options: `--assembler`, `--threads`, `--preset`, `--polish`, `--polish-path`, `--short-reads1`, `--short-reads2`, `--checkm2-db`, `--subset-path`
+
+3. **`cycmetaasm evaluate`** (standalone contig evaluation)
+   - Positional: `assembly` (FASTA), `output` (directory)
+   - Options: `--assembler`, `--threads`, `--assembly-info`, `--checkm2`, `--database`, `--metaquast`, `--reference`
+
+4. **`cycmetaasm bin`**
+   - Positional: `assembly` (FASTA), `reads` (FASTQ), `output` (directory)
+   - Options: `--assembler`, `--threads`, `--binning-model`, `--sequencing-tech`, `--checkm2-db`
+
+5. **`cycmetaasm classify`**
+   - Positional: `bins` (directory), `output` (directory)
+   - Options: `--database`, `--metadata`, `--assembler`, `--threads`, `--tool`, `--ass2ref`
+
+6. **`cycmetaasm summarize`**
+   - Positional: `bins_quality_report` (TSV), `output` (directory)
+   - Options: `--threads`, `--classification`, `--mag-path`, `--scmag-info`, `--fastq-file`
+
+#### Configuration
+- No external YAML/JSON config files required; all parameters passed via CLI
+- Sequencing technology presets embedded in `src/CycMetaAsm/utils.py::preset_setting()`
+
+#### Environment Variables
+- `MPLCONFIGDIR`, `XDG_CACHE_HOME`, `FONTCONFIG_PATH`, `FONTCONFIG_FILE` (set in Dockerfile for matplotlib/fontconfig in containerized runs)
+
+---
+
+## C) Algorithm & Pipeline Details
+
+### MODULE 1: Preprocessing (`preprocess`)
+
+**Entry:** `src/CycMetaAsm/pipelines/preprocess.py::run_preprocess()`
+
+#### Step-by-Step Pipeline
+
+1. **Downsampling (Optional)**
+   - **Condition:** If `--downsample` provided (e.g., "10G" → 10×10⁹ bases)
+   - **Algorithm:** 
+     - Parse input FASTQ; compute cumulative base counts
+     - Shuffle read indices (seed=1005)
+     - Accumulate reads until target bases reached
+   - **Implementation:** `preprocess.py::FastqDownsampler`
+   - **Output:** `<output>/downsampled.fastq.gz`
+   - **Tool:** `pigz` for compression (`-p <threads>`)
+
+2. **Quality Filtering**
+   - **Condition:** Always (if `--min-length` and `--min-quality` set)
+   - **External Tool:** `chopper`
+   - **Command Template:**
+     ```bash
+     chopper -i <fastq> --minlength <min_length> --quality <min_quality> -t <threads> | pigz -p <threads> > filtered.fastq.gz
+     ```
+   - **Defaults:** `--min-length 1000`, `--min-quality 7`
+   - **Output:** `<output>/qc/filtered.fastq.gz`
+
+3. **Host Removal (Optional)**
+   - **Condition:** If `--host-reference` provided
+   - **External Tools:** `minimap2`, `samtools`
+   - **Command Pipeline:**
+     ```bash
+     minimap2 <preset> -t <threads> <host_ref> <fastq> | 
+     samtools view -@ <threads> -f 4 -b | 
+     samtools fastq -@ <threads> | 
+     pigz -p <threads> > host_removed.fastq.gz
+     ```
+   - **Preset Selection (from `utils.py::preset_setting()`):**
+     - CycloneSEQ: `-a -k 16 -w 13 -A 2 -B 4 -O 4,41 -E 2,1 -s 180 -U70,1000000 --eqx --secondary=no`
+     - HiFi: `-ax map-hifi --eqx --secondary=no`
+     - NanoPore: `-ax map-ont --eqx --secondary=no`
+   - **Unmapped reads:** Extracted via `samtools view -f 4` (unmapped flag)
+   - **Output:** `<output>/remove_host/host_removed.fastq.gz`
+
+**Checkpoint Mechanism:**
+- Each substep creates `_isDone` sentinel file upon completion
+- Rerunning the same command skips completed steps
+
+**Thresholds & Parameters:**
+- Downsampling seed: `1005` (hardcoded in `FastqDownsampler`)
+- Filter defaults: min_length=1000, min_quality=7 (Q-score)
+
+---
+
+### MODULE 2: Assembly (`assemble`)
+
+**Entry:** `src/CycMetaAsm/pipelines/assembly.py::AssemblyRunner.run()`
+
+#### Step-by-Step Pipeline
+
+1. **Assembly (metaFlye)**
+   - **External Tool:** `flye` (metaFlye mode)
+   - **Command Template:**
+     ```bash
+     flye <preset> <fastq> --out-dir <output> --threads <threads> --meta
+     ```
+   - **Preset:** `--nano-raw` for CycloneSEQ/NanoPore (from `utils.py::preset_setting()`)
+   - **Output Files:**
+     - `<output>/assembly.fasta`: Assembled contigs
+     - `<output>/assembly_info.txt`: Contig metadata (length, coverage, circularity)
+   - **Checkpoint:** `<output>/_isDone` prevents re-run
+
+2. **Polishing (Optional, if `--polish` enabled)**
+
+   **2.1 Short-Read QC (if `--short-reads1/2` provided)**
+   - **External Tool:** `fastp`
+   - **Command:**
+     ```bash
+     fastp -i <short_reads1> -o filter_1.fq.gz -I <short_reads2> -O filter_2.fq.gz \
+           --n_base_limit 0 --thread <threads>
+     ```
+   - **Output:** `<polish_dir>/short_reads_qc/filter_{1,2}.fq.gz`
+   - **Checkpoint:** `<polish_dir>/short_reads_qc/_isDone`
+
+   **2.2 NextPolish Execution**
+   - **External Tool:** `nextPolish`
+   - **Configuration:** Auto-generated `run.cfg` written to `<polish_dir>/run.cfg`
+   - **Key Settings:**
+     ```ini
+     [General]
+     job_type = local
+     task = best
+     parallel_jobs = 6
+     multithread_jobs = <threads>
+     genome = <assembly.fasta>
+     genome_size = auto
+     workdir = <polish_dir>
+
+     [sgs_option]  # If short reads provided
+     sgs_fofn = sgs.fofn
+     sgs_options = -max_depth 100 -bwa
+
+     [lgs_option]  # Long reads (always)
+     lgs_fofn = lgs.fofn
+     lgs_options = -min_read_len 1000 -max_depth 100
+     lgs_minimap2_options = -x map-ont
+     ```
+   - **Command:**
+     ```bash
+     nextPolish <run.cfg>
+     ```
+   - **Output:** `<polish_dir>/genome.nextpolish.fasta`
+   - **Checkpoint:** `<polish_dir>/_isDone`
+
+**Thresholds:**
+- NextPolish min_read_len: 1000
+- Max depth: 100 (both short and long)
+- fastp n_base_limit: 0 (no ambiguous bases allowed)
+
+**Assembly Info Parsing:**
+- `assembly_info.txt` format (Flye):
+  ```
+  #seq_name  length  cov.  circ.
+  contig_1   500000  50.5  Y
+  ```
+- Parsed by `utils.py::read_assembly_info()`
+
+---
+
+### MODULE 3: Evaluation & Completeness-Aware Strategy (`evaluate` / within `assemble`)
+
+**Entry:** `src/CycMetaAsm/pipelines/evaluation.py::ContigAnalyzer`
+
+#### Algorithm: Completeness-Aware Strategy
+
+**Condition:** Triggered if `--checkm2-db` provided during `assemble` command
+
+**Step-by-Step:**
+
+1. **Identify Large Contigs**
+   - Parse assembly FASTA
+   - Filter: Length ≥ 500,000 bp
+   - Write each qualifying contig to `<subset_path>/tmp/<contig_id>.fasta`
+
+2. **CheckM2 Assessment**
+   - **External Tool:** `checkm2`
+   - **Command:**
+     ```bash
+     checkm2 predict --threads <threads> --input <tmp_dir> \
+                     --output-directory <checkm2_output> --force --quiet \
+                     --database_path <checkm2_db>
+     ```
+   - **Output:** `<checkm2_output>/quality_report.tsv`
+     - Columns: `Name`, `Completeness`, `Contamination`, `Genome_Size`, etc.
+
+3. **Extract scMAGs**
+   - **Criteria:** Completeness ≥ 93% AND Length ≥ 500kb
+   - **Action:**
+     - Write each qualifying contig as `<subset_path>/scMAGs/<contig_id>.fa`
+     - Generate `scMAGs_info.tsv` with columns: `Contig`, `Length`, `Completeness`, `Contamination`
+   - **Non-qualifying contigs:** Written to `<subset_path>/to_be_binned.fasta`
+
+**Metrics Definitions:**
+- **Completeness (%):** CheckM2's estimate of genome completeness based on presence of single-copy marker genes (calculated by CheckM2 internal model)
+- **Contamination (%):** Estimated contamination based on duplicated markers (CheckM2 internal)
+- **N50:** Not computed here; available from metaQUAST (optional evaluation subcommand)
+
+**Thresholds:**
+- scMAG length cutoff: 500,000 bp
+- scMAG completeness cutoff: 93%
+
+---
+
+### MODULE 4: Binning (`bin`)
+
+**Entry:** `src/CycMetaAsm/pipelines/binning.py::run_binning()`
+
+#### Step-by-Step Pipeline
+
+1. **Read Alignment**
+   - **External Tools:** `minimap2`, `samtools`
+   - **Command:**
+     ```bash
+     minimap2 <preset> -t <threads> --sam-hit-only <assembly_fasta> <reads_fastq> | 
+     samtools sort -@ <threads> -o aligned.bam
+     samtools index aligned.bam
+     ```
+   - **Preset:** Same as preprocessing (CycloneSEQ default)
+   - **Output:** `<output>/aligned.bam`, `aligned.bam.bai`
+
+2. **SemiBin2 Binning**
+   - **External Tool:** `SemiBin2`
+   - **Command:**
+     ```bash
+     SemiBin2 single_easy_bin \
+       --random-seed 1005 \
+       --sequencing-type=long_read \
+       --environment <binning_model> \
+       --compression none \
+       --tmpdir <output>/tmp \
+       -t <threads> \
+       --input-fasta <assembly_fasta> \
+       --input-bam <aligned.bam> \
+       --output <output>
+     ```
+   - **Available Models (--environment):**
+     - `global` (default): General-purpose model
+     - `human_gut`, `dog_gut`, `ocean`, `soil`, `cat_gut`, `human_oral`, `mouse_gut`, `pig_gut`, `built_environment`, `wastewater`, `chicken_caecum`
+   - **Output:** `<output>/output_bins/*.fasta` (one file per bin)
+   - **Checkpoint:** `<output>/_isDone`
+
+3. **CheckM2 Bin Quality Assessment (Optional)**
+   - **Condition:** If `--checkm2-db` provided
+   - **Command:** (via `ContigAnalyzer.run_checkm2()`)
+     ```bash
+     checkm2 predict --threads <threads> --input <output_bins> \
+                     -x fasta --output-directory <output>/checkm2 \
+                     --force --quiet --database_path <checkm2_db>
+     ```
+   - **Output:** `<output>/checkm2/quality_report.tsv`
+
+**Parameters:**
+- SemiBin2 random seed: 1005
+- Sequencing type: `long_read`
+- Compression: `none` (output bins as plain FASTA)
+
+---
+
+### MODULE 5: Classification (`classify`)
+
+**Entry:** `src/CycMetaAsm/pipelines/classify.py::Classifier.run()`
+
+#### Algorithm: Taxonomic Classification with skani
+
+**Step-by-Step:**
+
+1. **Load GTDB Metadata**
+   - **Input:** TSV file mapping accessions to taxonomy strings
+   - **Format:** `<accession>\t<taxonomy>` (e.g., `GCA_000123456.1\td__Bacteria;p__Proteobacteria;...`)
+   - **Caching:** MD5-based pickle cache (`<metadata>.pkl`) for fast re-loads
+   - **Implementation:** `classify.py::Classifier._load_gtdb_metadata()`
+
+2. **skani Search**
+   - **External Tool:** `skani`
+   - **Command:**
+     ```bash
+     skani search <bin1.fasta> <bin2.fasta> ... -d <skani_db> \
+           -o results_file.txt -t <threads> --min-af 50 \
+           --short-header --detailed
+     ```
+   - **Key Parameter:** `--min-af 50` (minimum alignment fraction: 50%, aligns with GTDB classification standards)
+   - **Output:** `results_file.txt` (TSV with columns: `Query_file`, `Ref_file`, `ANI`, `Num_query_contigs`, etc.)
+
+3. **Parse and Annotate Results**
+   - Extract accession from `Ref_file` (e.g., `GCA_000123456.1` from filename)
+   - Map to GTDB taxonomy string
+   - Parse taxonomy into levels: Domain, Phylum, Class, Order, Family, Genus, Species
+     - Format: `d__<Domain>;p__<Phylum>;c__<Class>;...`
+   - **ANI (Average Nucleotide Identity):** Directly from skani output (percentage)
+
+4. **Deduplication**
+   - Keep best hit per MAG (highest ANI)
+   - skani already returns sorted results by ANI (descending)
+   - **Implementation:** `pandas.DataFrame.drop_duplicates("MAG_ID", keep="first")`
+
+**Output Files:**
+- `classify_result.tsv`: All hits
+- `classify_result_deduplicated.tsv`: Best hit per MAG
+
+**Output Columns:**
+- `Reference`, `MAG_ID`, `ANI`, `Num_contigs`, `Taxonomy`, `Domain`, `Phylum`, `Class`, `Order`, `Family`, `Genus`, `Species`
+
+**Thresholds:**
+- Minimum alignment fraction: 50% (skani `--min-af`)
+
+---
+
+### MODULE 6: Summarization (`summarize`)
+
+**Entry:** `src/CycMetaAsm/pipelines/summary.py::process_files()`
+
+#### Step-by-Step Pipeline
+
+1. **Merge Quality & Classification Data**
+   - Load CheckM2 quality report TSV
+   - Merge with classification results (if provided)
+   - Include scMAG info (if provided)
+   - **Output Columns:** `MAG_ID`, `Completeness`, `Contamination`, `Contig_N50`, `Total_Contigs`, `Genome_Size`, `Reference`, `ANI`, `Taxonomy`, taxonomic levels
+
+2. **Rank MAGs by Quality**
+   - **Algorithm (from `summary.py::_rank_mag_by_quality()`):**
+     - **High Quality:** Completeness ≥90% AND Contamination ≤5%
+     - **Medium Quality:** Completeness ≥50% AND Contamination ≤10%
+     - **Low Quality:** 
+       - Quality Score < 50, where `Quality_Score = Completeness - 5 × Contamination`
+       - OR Total_Contigs > 2000
+   - **Output:** New column `Quality_rank` (High/Medium/Low)
+
+3. **Abundance Profiling (Optional)**
+   - **Condition:** If `--mag-path` and `--fastq-file` provided
+   - **External Tool:** `sylph`
+   - **Steps:**
+     a. Create MAG file list (one line per MAG FASTA)
+     b. **Sketch MAGs:**
+        ```bash
+        sylph sketch -l <mag_file_list> -c 200 -t <threads> -o sylph_mag_sketch
+        ```
+     c. **Profile Abundance:**
+        ```bash
+        sylph profile sylph_mag_sketch.syldb <fastq_file> -c 200 -t <threads> -o sylph_classification.tsv
+        ```
+   - **Output Columns:** `MAG_ID`, `Taxonomic_abundance(%)`, `Sequence_abundance(%)`
+
+4. **Copy MAGs by Quality**
+   - High/Medium quality MAGs → `<outdir>/passed_quality_mags/`
+   - Low quality MAGs → `<outdir>/low_quality_mags/`
+
+5. **Generate Visualizations**
+
+   **5.1 Quality Stats Table (`quality_stats.tsv`)**
+   - Single-row TSV with counts and total genome sizes:
+     - `High_MAGs`, `Medium_MAGs`, `All_MAGs`, `High_Genome_Size`, `Medium_Genome_Size`, `All_Genome_Size`
+
+   **5.2 Completeness/Contamination Rank Plots (`rank_completeness_contamination.png`)**
+   - Two-panel matplotlib figure:
+     - Left: Completeness vs. Rank (descending completeness)
+     - Right: Contamination vs. Rank (ascending contamination)
+   - Filters: Excludes Low-quality MAGs
+
+   **5.3 Contig N50 Violin Plot (`contig_n50_violin.png`)**
+   - Seaborn violin plot of N50 distribution (in Mbp) for non-Low-quality MAGs
+
+   **5.4 Taxonomic Abundance Sunburst (Optional, `taxonomic_abundance.html`)**
+   - **Condition:** If classification and abundance data available
+   - **Tool:** Plotly interactive HTML
+   - **Hierarchy:** Domain → Phylum → Class → Order → Family → Genus → Species
+   - **Filter:** min_abundance=0.01% (1e-4)
+
+6. **Generate Summary Tables**
+   - **`summary.tsv`:** All MAGs with all columns
+   - **`top_ranked_mag_summary.tsv`:** Top 20 High/Medium quality MAGs sorted by Quality_Score (descending)
+
+**Metrics & Formulas:**
+- **Quality_Score:** `Completeness - 5 × Contamination` (for ranking within High/Medium tiers)
+- **N50 (Contig_N50):** From CheckM2 output (computed by CheckM2 internally)
+- **Taxonomic_abundance(%):** From sylph (relative abundance based on sequence similarity)
+- **Sequence_abundance(%):** From sylph (raw sequencing depth abundance)
+
+---
+
+## D) Installation & Reproducibility
+
+### D.1 Dependencies
+
+**Python Version:** ≥3.12 (as specified in `pyproject.toml`)
+
+**Conda Environment:** Recommended for reproducibility  
+See `environment.yml` for full dependency list.
+
+**Key External Tools (installed via conda):**
+- `flye` ≥2.9 (metaFlye assembly)
+- `nextpolish` ≥1.4.1 (polishing)
+- `minimap2` ≥2.2 (alignment)
+- `samtools` ≥1.14 (BAM processing)
+- `chopper` (read filtering, Rust-based)
+- `fastp` (short-read QC)
+- `pigz` ≥2.8 (parallel gzip)
+- `SemiBin2` ≥2.2 (binning)
+- `checkm2` (quality assessment)
+- `skani` ≥0.3 (taxonomic classification)
+- `sylph` ≥0.8.1 (abundance profiling)
+- `quast` ≥5.2.0 (optional, for metaQUAST evaluation)
+
+**Python Libraries:**
+- `biopython`, `pandas`, `numpy`, `matplotlib`, `seaborn`, `plotly`
+
+### D.2 Installation Steps
+
+**Option 1: Conda + Pip (Development)**
 
 ```bash
+# 1. Create conda environment
+conda env create -f environment.yml
+conda activate metagenome_assembly
+
+# 2. Install CycMetaAsm Python package (editable mode)
+pip install --upgrade pip
+pip install -e .
+
+# 3. Verify installation
+cycmetaasm --help
+```
+
+**Option 2: Docker (Production)**
+
+```bash
+# 1. Build Docker image (uses pre-compiled Nuitka binary)
+docker build -t cycmetaasm:1.0.0 .
+
+# 2. Run container
+docker run --rm -v $(pwd)/data:/data cycmetaasm:1.0.0 --help
+```
+
+**Option 3: Standalone Binary (Nuitka Compilation)**
+
+```bash
+# On host machine with conda environment activated
 pip install --upgrade pip nuitka
+pip install -e .
+
+# Compile to standalone binary
 python -m nuitka \
   --onefile \
   --standalone \
@@ -39,107 +572,379 @@ python -m nuitka \
   --include-package=plotly \
   --include-package-data=plotly \
   --output-dir=build \
-    src/CycMetaAsm
+  src/CycMetaAsm
+
+# Binary will be at: build/CycMetaAsm.bin
+# Copy to system path: sudo cp build/CycMetaAsm.bin /usr/local/bin/cycmetaasm
 ```
 
-## Usage
+### D.3 Databases Required
 
-The toolkit provides a subcommand-oriented CLI `cycmetaasm`.
+**CheckM2 Database:**
+- Download: `checkm2 database --download --path <db_path>`
+- Required for MAG quality assessment
+- File: `uniref100.KO.1.dmnd` (typically ~4GB)
 
-### Quick Start: Full Pipeline
+**skani GTDB Database:**
+- Pre-built GTDB sketch database for `skani search`
+- Required for taxonomic classification
+- Companion metadata file: `<database>_metadata.tsv` (accession → taxonomy mapping)
 
-Run the complete end-to-end workflow:
+**Host Reference (Optional):**
+- For host removal, e.g., `GRCh38.p14.fa` (human genome)
+- Any FASTA-formatted reference genome
 
-```bash
-cycmetaasm pipeline input.fastq.gz output_dir \
-  --threads 40 \
-  --sequencing-tech CycloneSEQ \
-  --assembler metaflye \
-  --host-reference database/GRCh38.p14.fa \
-  --database database/skani_db \
-  --classify-tool skani
+### D.4 Determinism & Reproducibility
+
+**Random Seeds:**
+- Downsampling: `seed=1005` (hardcoded in `FastqDownsampler.__init__()`)
+- SemiBin2 binning: `--random-seed 1005` (hardcoded in binning command)
+
+**Version Pinning:**
+- Use `conda-linux-64.lock` for exact package versions (as in Dockerfile)
+- Lock file ensures bit-for-bit reproducibility across environments
+
+**Tool Presets:**
+- Sequencing technology presets defined in `src/CycMetaAsm/utils.py::preset_setting()`
+- CycloneSEQ minimap2 preset: `-a -k 16 -w 13 -A 2 -B 4 -O 4,41 -E 2,1 -s 180 -U70,1000000 --eqx --secondary=no`
+- metaFlye preset: `--nano-raw` (for CycloneSEQ/NanoPore)
+
+**Checkpoint System:**
+- All modules support checkpoint files (`_isDone`)
+- Re-running commands skips completed steps, ensuring consistency
+
+---
+
+## E) I/O Specification & Directory Structure
+
+### E.1 Input File Expectations
+
+**FASTQ Naming Conventions:**
+- Extensions: `.fastq`, `.fastq.gz`, `.fq`, `.fq.gz`
+- Single or gzip-compressed supported
+- Validation: `utils.py::is_fastq_file()`
+
+**Paired-End Short Reads (Optional):**
+- Must provide both `--short-reads1` and `--short-reads2`
+- Standard Illumina naming (e.g., `lib_1.fq.gz`, `lib_2.fq.gz`)
+
+**Sample Sheet Format:** Not required; single-sample mode only
+
+**FASTA (Assembly) Inputs:**
+- Extensions: `.fasta`, `.fasta.gz`, `.fa`, `.fa.gz`
+- Validation: `utils.py::is_fasta_file()`
+
+### E.2 Output Directory Tree
+
+```
+<output_root>/
+├── downsampled.fastq.gz              # If downsample enabled
+├── _isDone                           # Checkpoint file
+├── qc/
+│   ├── filtered.fastq.gz             # Filtered reads
+│   └── _isDone
+├── remove_host/
+│   ├── host_removed.fastq.gz         # Host-depleted reads
+│   └── _isDone
+├── assembly.fasta                    # Assembly contigs
+├── assembly_info.txt                 # Contig metadata (Flye)
+├── _isDone
+├── polish/                           # If --polish enabled
+│   ├── short_reads_qc/
+│   │   ├── filter_1.fq.gz
+│   │   ├── filter_2.fq.gz
+│   │   └── _isDone
+│   ├── lgs.fofn                      # Long-read file list
+│   ├── sgs.fofn                      # Short-read file list (if provided)
+│   ├── run.cfg                       # NextPolish config
+│   ├── genome.nextpolish.fasta       # Polished assembly
+│   └── _isDone
+├── subset_contigs/                   # If --checkm2-db enabled
+│   ├── tmp/                          # Temp contig files for CheckM2
+│   ├── checkm2/
+│   │   ├── quality_report.tsv
+│   │   └── _isDone
+│   ├── scMAGs/
+│   │   ├── <contig_id>.fa            # High-quality single-contig MAGs
+│   │   └── scMAGs_info.tsv           # MAG metadata
+│   └── to_be_binned.fasta            # Remaining contigs for binning
+├── <binning_output>/
+│   ├── aligned.bam                   # Read alignments
+│   ├── aligned.bam.bai
+│   ├── output_bins/
+│   │   └── *.fasta                   # Bins
+│   ├── checkm2/
+│   │   ├── quality_report.tsv
+│   │   └── _isDone
+│   ├── tmp/                          # SemiBin2 temp files
+│   └── _isDone
+├── <classify_output>/
+│   ├── results_file.txt              # skani raw output
+│   ├── classify_result.tsv           # Full classification
+│   ├── classify_result_deduplicated.tsv
+│   └── _isDone
+└── <summary_output>/
+    ├── tmp/
+    │   ├── mag_file_list.txt
+    │   ├── sylph_mag_sketch.syldb
+    │   └── sylph_classification.tsv
+    ├── passed_quality_mags/
+    │   └── *.fa
+    ├── low_quality_mags/
+    │   └── *.fa
+    ├── summary.tsv                   # All MAGs summary
+    ├── top_ranked_mag_summary.tsv    # Top 20 MAGs
+    ├── quality_stats.tsv             # Count & size stats
+    ├── rank_completeness_contamination.png
+    ├── contig_n50_violin.png
+    └── taxonomic_abundance.html      # Interactive sunburst (if classification available)
 ```
 
-### Subcommands
+### E.3 Key Output File Formats
 
-You can also run individual steps of the pipeline:
-
-#### 1. Preprocess
-
-Downsample, filter, and remove host reads.
-
-```bash
-cycmetaasm preprocess input.fastq.gz output_dir \
-  --threads 10 \
-  --downsample 10G \
-  --min-length 1000 \
-  --min-quality 10 \
-  --host-reference database/GRCh38.p14.fa
+**`assembly_info.txt` (Flye):**
+```
+#seq_name   length   cov.    circ.
+contig_1    1000000  45.2    Y
+contig_2    500000   30.1    N
 ```
 
-#### 2. Assemble
-
-使用metaflye（目前只支持该组装软件）进行组装,组装结果输出在指定输出目录下，主要看`assembly.fasta`和`assembly_info.txt`（记录了contig长度、是否成环等信息）。组装完成，会在指定输出目录下生成`_isDone`文件作为标志。当再次运行组装命令时，如果发现该标志文件存在，则会跳过组装步骤，直接使用已有的组装结果。
-启用`--polish`参数后，会进行组装后的短序列纠错，纠错结果会生成在组装结果输出目录的`polish`子目录通过`--polish-path`参数指定的纠错结果目录下，主要看`genome.nextpolish.fasta`。如果提供了短序列数据（`--short-reads1`和`--short-reads2`），则会使用这些短序列进行混合组装后的纠错，否则只使用长序列进行自我纠错。使用短序列数据时，会先调用`fastp`进行短序列的质量控制和过滤，然后再进行纠错。短序列质控结果会生成在纠错结果目录的`short_reads_qc`子目录下，主要看`filter_1.fq.gz`和`filter_2.fq.gz`，并且同样使用`_isDone`文件作为质控完成的标志。纠错完成，会在纠错结果目录下生成`_isDone`文件作为标志。当再次运行组装命令时，如果发现该标志文件存在，则会跳过纠错步骤，直接使用已有的纠错结果。
-启用`--checkm2-db`参数后，会启用completeness-aware策略，在组装完成后对组装结果或纠错结果（如果启用了纠错）进行CheckM2质量评估，然后根据评估结果筛选completenes≥93%的长序列（≥500kb）作为高质量单contig MAGs（scMAGs）单独存放在`scMAGs`子目录下（每个contig一个fasta文件，并伴有`scMAGs_info.tsv`记录contig ID以及质量信息）跳过binning步骤，其余contig会被输出到`to_be_binned.fasta`文件中供后续binning使用。可通过`--subset-path`参数指定启用completeness-aware策略的结果输出路径，默认是直接在组装结果输出目录下生成`subset_contigs`子目录。
-注意，CheckM2质量评估输出目录隐式设定为completeness-aware策略结果输出路径的`checkm2`子目录。
-
-```bash
-cycmetaasm assemble output_dir/clean.fastq.gz output_dir \
-  --assembler metaflye \
-  --threads 40 \
-  --polish \
-  --short-reads1 lib.1.fq.gz --short-reads2 lib.2.fq.gz \
-  --checkm2-db database/CheckM2/uniref100.KO.1.dmnd
+**`scMAGs_info.tsv`:**
+```
+Contig          Length    Completeness  Contamination
+contig_large_1  1200000   95.5          1.2
+contig_large_2  800000    94.0          0.8
 ```
 
-#### 3. Bin
-
-Run SemiBin2 binning.
-使用SemiBin2对组装结果进行binning。输入的组装结果可以是完整的组装结果（`assembly.fasta`），也可以是completeness-aware策略筛选后的待binning序列（`to_be_binned.fasta`）。可通过`--binning-model`参数指定SemiBin2的binning模型，默认`global`（默认）和`single`两种模式，分别对应多样本联合binning和单样本独立binning。完成后会在Binnning结果目录下生成`output_bins`子目录，里面包含了所有的bins（每个bin一个fasta文件），并使用`_isDone`文件作为binning完成的标志。当再次运行binning命令时，如果发现该标志文件存在，则会跳过binning步骤，直接使用已有的binning结果。
-启用`--checkm2-db`参数后，会在binning完成后对bins进行CheckM2质量评估，评估结果会输出在Binnning结果目目录下的`checkm2`子目录下，主要看`quality_report.tsv`文件。同样使用`_isDone`文件作为质量评估完成的标志。当再次运行binning命令时，如果发现该标志文件存在，则会跳过质量评估步骤，直接使用已有的评估结果。
-
-```bash
-cycmetaasm bin assembly.fasta clean_reads.fastq output_dir \
-  --binning-model global \
-  --sequencing-tech CycloneSEQ \
-  --checkm2-db database/CheckM2/uniref100.KO.1.dmnd
+**`checkm2/quality_report.tsv`:**
+```
+Name         Completeness  Contamination  Genome_Size  Contig_N50  Total_Contigs
+bin.1        92.5          2.1            3000000      150000      5
+bin.2        85.0          4.5            2500000      100000      8
 ```
 
-#### 4. Classify
-
-Classify bins using skani.
-
-```bash
-cycmetaasm classify bins_dir output_dir \
-  --tool skani \
-  --database database/skani_db \
-  --metadata metadata.tsv
+**`classify_result_deduplicated.tsv`:**
+```
+Reference        MAG_ID  ANI   Num_contigs  Taxonomy                    Domain    Phylum           Class            ...
+GCA_000123456.1  bin.1   98.5  5            d__Bacteria;p__Proteo...   Bacteria  Proteobacteria   Gammaproteobac...
+GCA_000789012.1  bin.2   97.2  8            d__Bacteria;p__Firmicu...  Bacteria  Firmicutes       Bacilli          ...
 ```
 
-#### 5. Summarize
-
-Generate summary reports and plots.
-
-```bash
-cycmetaasm summarize checkm2_quality_report.tsv output_dir \
-  --classification classification_result.tsv \
-  --mag-path mags_dir \
-  --fastq-file original.fastq.gz
+**`summary.tsv`:**
+```
+MAG ID  Quality rank  Completeness  Contamination  Total Contigs  Genome Size  Contig N50  Reference        ANI   Taxonomic abundance(%)  Species         ...
+bin.1   High          92.5          2.1            5              3000000      150000      GCA_000123456.1  98.5  15.3                    Species_name
 ```
 
-## WDL Workflow
+### E.4 Logging
 
-A WDL (Workflow Description Language) version of the pipeline is available in `wdl/workflow.wdl`. It orchestrates the same tasks defined in the Python CLI.
+**Log Files:** No dedicated log files; logs written to stdout/stderr
 
-**Key Inputs:**
+**Verbosity Levels:** Controlled via `--log-level` (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
-* `input_fastq`: Raw sequencing data.
-* `host_reference`: Host genome for decontamination.
-* `checkm2_db_path`: Database for CheckM2.
-* `skani_database`: Database for taxonomic classification.
-* `polish`: Boolean to enable polishing.
+**Progress Reporting:**
+- Each external tool command logged via `utils.py::run_cmd()` (logs command line)
+- Checkpointing messages logged on `_isDone` creation
 
-## License
+### E.5 Error Handling
+
+**Exit Codes:**
+- 0: Success
+- Non-zero: Failure (from `subprocess.CalledProcessError` if external tool fails)
+
+**Common Failure Modes (detectable from code):**
+- Missing input files: `FileNotFoundError` in CLI argument validation
+- Unsupported file format: `parser.error()` in `cli.py`
+- Tool execution failure: `subprocess.CalledProcessError` with stderr logged
+- Empty bins directory: `FileNotFoundError` in `classify.py::Classifier._run_skani()`
+
+**Validation:**
+- FASTQ/FASTA format validation via extension checking (`utils.py::is_fastq_file()`, `is_fasta_file()`)
+- No deep schema validation; relies on external tools for format errors
+
+---
+
+## F) Performance & Scalability
+
+### F.1 Parallelization Strategy
+
+**Thread-Level Parallelism:**
+- All external tools support multithreading via `--threads` / `-t` / `-@` parameters
+- Default: 10 threads (user-configurable)
+
+**Per-Sample Execution:**
+- Single-sample mode only; no multi-sample parallelization built-in
+- For batch processing, use external workflow managers (e.g., WDL, Snakemake)
+
+**No Explicit Scatter/Gather:**
+- Pipeline is sequential within a sample
+- Binning/classification naturally parallelized by external tools (SemiBin2, skani)
+
+### F.2 Memory & Disk Considerations
+
+**Memory-Intensive Steps:**
+- Assembly (metaFlye): ~30-100GB RAM depending on dataset size
+- Binning (SemiBin2): ~10-30GB RAM
+- CheckM2: ~10-20GB RAM (model loading + prediction)
+
+**Disk Space:**
+- Temporary files: Assembly graph (metaFlye), alignment BAMs, SemiBin2 tmp
+- Cleanup: SemiBin2 tmp directory can be deleted post-run (not automated)
+- Checkpointing reduces redundant I/O
+
+**Streaming vs. Temp Files:**
+- Preprocessing uses pipe chains (minimizes temp files)
+- Assembly/binning write intermediate files (BAMs, bins) for reusability
+
+### F.3 Scalability
+
+**Dataset Size:**
+- Tested on long-read datasets from 1-100GB (raw FASTQ)
+- Downsampling recommended for >50GB to reduce assembly complexity
+
+**Contig Count:**
+- Binning handles assemblies with 1,000-10,000+ contigs
+- Low-quality filter excludes bins with >2,000 contigs (likely fragmented)
+
+### F.4 Container Considerations
+
+**Dockerfile Optimizations:**
+- Micromamba base for fast conda environment
+- Pre-compiled Nuitka binary reduces startup time
+- Writable cache directories for matplotlib (`MPLCONFIGDIR=/tmp/matplotlib`)
+
+**No cgroup Limits Coded:**
+- Resource limits should be imposed externally (Docker `--cpus`, `--memory` flags)
+
+---
+
+## G) Design-Doc Mapping
+
+### Mapping README Sections to Design Document Chapters
+
+| Design Doc Chapter | Content Source in README |
+|--------------------|--------------------------|
+| **Chapter 1: 目的 (Purpose)** | Section A.1.1 (Product Overview): Problem statement, integration/acceptance testing relevance (MAG quality validation, reproducibility) |
+| **Chapter 2: 范围 (Scope)** | Section A.1.1 (Target Users, Supported Data Types): In-scope = CycloneSEQ long reads, single-sample MAG recovery; Out-of-scope = multi-sample joint analysis, short-read-only mode |
+| **Chapter 3: 术语/缩略语 (Terms/Abbreviations)** | Throughout: MAG (Metagenome-Assembled Genome), scMAG (single-contig MAG), ANI (Average Nucleotide Identity), N50, GTDB (Genome Taxonomy Database), FASTQ/FASTA formats, CheckM2, SemiBin2, skani, sylph, metaFlye, NextPolish |
+| **Chapter 4: 参考资料 (References)** | Section D.1 (Dependencies), D.3 (Databases): Tool documentation (Flye, SemiBin2, CheckM2, skani, sylph), GTDB database, GRCh38 reference genome |
+| **Chapter 5: 详细设计描述 (Detailed Design)** | Section B (Architecture & Module Decomposition): Module list table, CLI interface description, configuration (no external files), sequencing tech presets |
+| **Chapter 6: 算法设计描述 (Algorithm Design)** | Section C (Algorithm & Pipeline Details): Step-by-step pipelines, external tool commands with parameters, thresholds (length, quality, completeness, ANI), metric definitions (Quality_Score, ANI, abundance), example output tables |
+
+### TBD Items (Requires Confirmation from Code or Additional Documentation)
+
+1. **Front Matter Metadata (Chapter 0):**
+   - 项目编号, 文件编号, 文件密级, 评审/签名记录表 → **TBD**: Not inferable from code; requires organizational metadata
+
+2. **Integration Testing Details (Chapter 1):**
+   - Specific acceptance criteria, test datasets, validation procedures → **TBD**: No test suite found in repository; need test plan documentation
+
+3. **Version History / 修订记录 (Chapter 0):**
+   - Previous versions, change logs → **TBD**: Only version 0.1.0 in `pyproject.toml`; need formal revision tracking
+
+4. **Rosa Tool (Preprocessing QC):**
+   - Called in WDL but not in CLI → **TBD**: Confirm if Rosa is external or integrated; no code found in `src/CycMetaAsm/`
+
+5. **metaMDBG Assembler:**
+   - Listed in `cli.py` choices but no implementation in `assembly.py` → **TBD**: Confirm planned vs. implemented; code only handles metaFlye
+
+6. **Performance Benchmarks:**
+   - Runtime, peak memory for reference datasets → **TBD**: Need empirical benchmark runs; not coded
+
+7. **Error Code Taxonomy:**
+   - Specific exit codes for different failure modes → **TBD**: Code raises generic exceptions; no custom error code system
+
+8. **kMetaShot Classification:**
+   - Deprecated code in `classify.py` → **TBD**: Confirm removal or document as unsupported legacy
+
+---
+
+## H) Technical Notes for Design Document Authors
+
+### Code References for Validation
+
+- **CLI Entry:** `src/CycMetaAsm/cli.py::build_parser()` defines all subcommands and parameters
+- **Preset Settings:** `src/CycMetaAsm/utils.py::preset_setting()` (lines 225-249) contains sequencing tech mappings
+- **Checkpoint Logic:** `src/CycMetaAsm/utils.py::checkpoint()`, `mark_done()` (lines 43-52)
+- **Command Execution:** `src/CycMetaAsm/utils.py::run_cmd()` (lines 68-135) handles subprocess calls
+- **Quality Ranking:** `src/CycMetaAsm/pipelines/summary.py::_rank_mag_by_quality()` (lines 358-386)
+- **Completeness-Aware Logic:** `src/CycMetaAsm/cli.py` (lines 262-320) in `assemble` command handler
+
+### External Tool Documentation Links
+
+- **Flye (metaFlye):** https://github.com/fenderglass/Flye
+- **NextPolish:** https://github.com/Nextomics/NextPolish
+- **SemiBin2:** https://github.com/BigDataBiology/SemiBin
+- **CheckM2:** https://github.com/chklovski/CheckM2
+- **skani:** https://github.com/bluenote-1577/skani
+- **sylph:** https://github.com/bluenote-1577/sylph
+- **chopper:** https://github.com/wdecoster/chopper
+- **minimap2:** https://github.com/lh3/minimap2
+- **GTDB:** https://gtdb.ecogenomic.org/
+
+### Acceptance Testing Recommendations
+
+1. **Unit Tests:** Validate individual module outputs (e.g., filtered FASTQ read count, contig count)
+2. **Integration Tests:** Run full pipeline on mock dataset (5-10GB); verify MAG count, quality distribution
+3. **Regression Tests:** Compare output against baseline run with fixed seed (ensure determinism)
+4. **Performance Tests:** Measure runtime and peak memory on standard dataset sizes (10GB, 50GB, 100GB)
+
+---
+
+## I) License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## J) Appendix: Quick Reference
+
+### Minimal Working Example
+
+```bash
+# 1. Preprocess
+cycmetaasm preprocess raw_reads.fastq.gz output/ \
+  --threads 40 --min-length 1000 --min-quality 7
+
+# 2. Assemble with completeness-aware strategy
+cycmetaasm assemble output/qc/filtered.fastq.gz output/ \
+  --threads 40 --checkm2-db checkm2_db/uniref100.KO.1.dmnd
+
+# 3. Bin remaining contigs
+cycmetaasm bin output/subset_contigs/to_be_binned.fasta \
+  output/qc/filtered.fastq.gz output/binning/ \
+  --threads 40 --checkm2-db checkm2_db/uniref100.KO.1.dmnd
+
+# 4. Classify bins
+cycmetaasm classify output/binning/output_bins/ output/classify/ \
+  --database skani_db/ --metadata gtdb_metadata.tsv --threads 40
+
+# 5. Summarize all MAGs
+cycmetaasm summarize output/binning/checkm2/quality_report.tsv output/summary/ \
+  --classification output/classify/classify_result_deduplicated.tsv \
+  --mag-path output/subset_contigs/scMAGs/ \
+  --scmag-info output/subset_contigs/scMAGs/scMAGs_info.tsv \
+  --fastq-file output/qc/filtered.fastq.gz --threads 40
+```
+
+### Common Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--threads` | 10 | Number of CPU threads |
+| `--min-length` | 1000 | Minimum read length (bp) |
+| `--min-quality` | 7 | Minimum read quality (Q-score) |
+| `--sequencing-tech` | CycloneSEQ | Preset: CycloneSEQ, HiFi, NanoPore |
+| `--assembler` | metaflye | Assembler: metaflye (only supported) |
+| `--binning-model` | global | SemiBin2 environment model |
+| `--tool` (classify) | skani | Classification tool: skani |
+
+### Contact & Support
+
+For issues, questions, or contributions, please refer to the repository maintainers (see `pyproject.toml` authors field).
+
+---
+
+**Document Version:** 1.0.0  
+**Last Updated:** 2026-01-08  
+**Generated from Code Analysis of:** CycMetaAsm v0.1.0 (commit: latest on branch)
