@@ -9,7 +9,8 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import plotly.graph_objects as go
-import plotly.express as px
+
+# import plotly.express as px
 from ..utils import run_cmd
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,7 +45,10 @@ def process_files(
         "Total_Contigs",
         "Genome_Size",
     ]
-    df_scmag_info = _parse_scMAGs_info(scmag_info) if scmag_info else None
+    # TODO: scmag_info maybe None if not assigned in arguments
+    df_scmag_info = (
+        _parse_scMAGs_info(scmag_info) if Path(scmag_info).exists() else None
+    )
     if df_scmag_info is not None:
         selected = pd.concat([selected, df_scmag_info], ignore_index=True)
     if classification is not None:
@@ -568,39 +572,39 @@ def _plot_abundance_sunburst(
     return fig
 
 
-def _plot_summary_dot(df: pd.DataFrame, output: Path) -> None:
-    sns.set_style("whitegrid")
-    plt.rcParams["font.sans-serif"] = ["DejaVu Sans"]
-    plt.rcParams["axes.unicode_minus"] = False
+# def _plot_summary_dot(df: pd.DataFrame, output: Path) -> None:
+#     sns.set_style("whitegrid")
+#     plt.rcParams["font.sans-serif"] = ["DejaVu Sans"]
+#     plt.rcParams["axes.unicode_minus"] = False
 
-    group_vars = [col for col in ("Phylum", "Genus", "Species") if col in df.columns]
-    if not group_vars:
-        _LOGGER.warning("No taxonomy columns available for plotting")
-        return
+#     group_vars = [col for col in ("Phylum", "Genus", "Species") if col in df.columns]
+#     if not group_vars:
+#         _LOGGER.warning("No taxonomy columns available for plotting")
+#         return
 
-    fig, axes = plt.subplots(1, len(group_vars), figsize=(6 * len(group_vars), 5))
-    if len(group_vars) == 1:
-        axes = [axes]
-    for ax, group in zip(axes, group_vars):
-        categories = df[group].fillna("Unknown")
-        palette = sns.color_palette("tab20", n_colors=max(3, categories.nunique()))
-        scatter = ax.scatter(
-            df["Completeness"],
-            df["Contamination"],
-            c=pd.factorize(categories)[0],
-            cmap=plt.cm.get_cmap("tab20", len(palette)),
-            alpha=0.7,
-            s=60,
-        )
-        ax.set_xlabel("Completeness (%)")
-        ax.set_ylabel("Contamination (%)")
-        ax.set_title(group)
-        cbar = plt.colorbar(scatter, ax=ax)
-        cbar.set_ticks(range(categories.nunique()))
-        cbar.set_ticklabels(
-            categories.unique(), rotation=45 if categories.nunique() > 10 else 0
-        )
-        ax.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(output, dpi=300, bbox_inches="tight")
-    plt.close()
+#     fig, axes = plt.subplots(1, len(group_vars), figsize=(6 * len(group_vars), 5))
+#     if len(group_vars) == 1:
+#         axes = [axes]
+#     for ax, group in zip(axes, group_vars):
+#         categories = df[group].fillna("Unknown")
+#         palette = sns.color_palette("tab20", n_colors=max(3, categories.nunique()))
+#         scatter = ax.scatter(
+#             df["Completeness"],
+#             df["Contamination"],
+#             c=pd.factorize(categories)[0],
+#             cmap=plt.cm.get_cmap("tab20", len(palette)),
+#             alpha=0.7,
+#             s=60,
+#         )
+#         ax.set_xlabel("Completeness (%)")
+#         ax.set_ylabel("Contamination (%)")
+#         ax.set_title(group)
+#         cbar = plt.colorbar(scatter, ax=ax)
+#         cbar.set_ticks(range(categories.nunique()))
+#         cbar.set_ticklabels(
+#             categories.unique(), rotation=45 if categories.nunique() > 10 else 0
+#         )
+#         ax.grid(True, alpha=0.3)
+#     plt.tight_layout()
+#     plt.savefig(output, dpi=300, bbox_inches="tight")
+#     plt.close()

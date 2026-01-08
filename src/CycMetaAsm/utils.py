@@ -1,10 +1,10 @@
 """Shared helpers used across CycMetaAsm pipelines."""
 
 from __future__ import annotations
-
+import glob
 import gzip
 import logging
-import os
+
 import shutil
 import subprocess
 from pathlib import Path
@@ -16,7 +16,6 @@ from typing import (
     MutableMapping,
     Optional,
     Sequence,
-    Tuple,
     Union,
 )
 
@@ -164,6 +163,12 @@ def load_fasta_lengths(fasta_path: Union[str, Path]) -> Mapping[str, int]:
     return lengths
 
 
+def collect_fasta_paths(directory: str) -> Iterable[str]:
+    patterns = ("*.fasta", "*.fna", "*.fa")
+    for pattern in patterns:
+        yield from glob.glob(str(Path(directory) / pattern))
+
+
 def clear_directory(path: Union[str, Path], *, keep_root: bool = True) -> None:
     """Remove directory contents safely."""
     path = Path(path)
@@ -194,6 +199,7 @@ def read_assembly_info(
         first_line = handle.readline().strip()
         handle.seek(0)
         if first_line.startswith(">"):
+            # ? For metaMDBG assembly info
             for line in handle:
                 if not line.startswith(">"):
                     continue

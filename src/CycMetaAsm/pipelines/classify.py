@@ -9,7 +9,7 @@ import pickle
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Mapping, Optional, Tuple
+from typing import Dict, Mapping, Optional
 
 import pandas as pd
 
@@ -82,15 +82,12 @@ class ClassificationResult:
 class Classifier:
     def __init__(self, config: ClassificationConfig) -> None:
         self.config = config
-        self.classify_dir = Path(config.output_dir) / "classify" / self.config.assembler
+        self.classify_dir = Path(config.output_dir)
 
     def run(self) -> ClassificationResult:
         self.classify_dir.mkdir(parents=True, exist_ok=True)
         if self.config.tool.lower().startswith("skani"):
             return self._run_skani()
-        if "kmetashot" in self.config.tool.lower():
-            return self._run_skani()
-        #     return self._run_kmetashot()
         raise ValueError(f"Unsupported classification tool: {self.config.tool}")
 
     # ------------------------------------------------------------------

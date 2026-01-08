@@ -33,18 +33,28 @@ task preprocess {
                 echo "[INFO] Downsample value is 0; downsampling disabled."
             else
                 # Case 3: Normal downsampling
-                DS_FLAG="--downsample ${ds}G"
+                DS_FLAG="${ds}G"
             fi
         fi
     fi
-
-    cycmetaasm preprocess ~{input_fastq} work \
-      --threads ~{threads} \
-      --sequencing-tech ~{sequencing_tech} \
-      --min-length ~{min_length} \
-      --min-quality ~{min_quality} \
-      ~{if defined(host_reference) then "--host-reference " + host_reference else ""} \
-      "${DS_FLAG}"
+    if [[ -n "$DS_FLAG" ]]; then
+        echo "[INFO] Downsampling enabled: target data volume = $DS_FLAG"
+        cycmetaasm preprocess ~{input_fastq} work \
+        --threads ~{threads} \
+        --sequencing-tech ~{sequencing_tech} \
+        --min-length ~{min_length} \
+        --min-quality ~{min_quality} \
+        ~{if defined(host_reference) then "--host-reference " + host_reference else ""} \
+        --downsample "${DS_FLAG}"
+    else
+        echo "[INFO] Downsampling disabled."
+        cycmetaasm preprocess ~{input_fastq} work \
+        --threads ~{threads} \
+        --sequencing-tech ~{sequencing_tech} \
+        --min-length ~{min_length} \
+        --min-quality ~{min_quality} \
+        ~{if defined(host_reference) then "--host-reference " + host_reference else ""}
+    fi
 
     cp ~{if defined(host_reference) then "work/remove_host/host_removed.fastq.gz" else "work/qc/filtered.fastq.gz"} clean.fastq.gz
   >>>

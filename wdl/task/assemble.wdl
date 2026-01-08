@@ -33,6 +33,7 @@ task assemble_and_select {
     File assembly_fasta = "assembly.fasta"
     # File assembly_info = "work/Assembly/~{assembler}/assembly_info.tsv"
     File tobe_binned_fasta = "work/to_be_binned.fasta"
+    # TODO: need to check if scMAGs exist. Some samples may not have any scMAGs.
     Array[File] scMAGs = glob("work/scMAGs/*.fa")
     File scMAGs_info = "work/scMAGs/scMAGs_info.tsv"
   }

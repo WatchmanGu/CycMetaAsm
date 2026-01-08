@@ -108,10 +108,11 @@
 				"name_en": "Random sampling bases (Gb)",
 				"required": false,
 				"type": "Float",
-				"desc": "在分析前对原始数据随机抽取的总碱基数（Gbp），空则不抽取",
-				"desc_en": "Total bases (Gbp) to randomly retain before analysis; no sampling if unset",
+				"desc": "在分析前对原始数据随机抽取的总碱基数（Gbp），设置为0则不抽取",
+				"desc_en": "Total bases (Gbp) to randomly retain before analysis; no sampling if set to 0",
 				"visible": true,
-				"controlType": "float"
+				"controlType": "float",
+				"default": 0.0
 			},
             {
                 "key": "CycMetaAsmWorkflow.host_reference",

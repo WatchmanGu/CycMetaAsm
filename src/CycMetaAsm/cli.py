@@ -21,7 +21,8 @@ from .pipelines.classify import ClassificationConfig, Classifier
 from .pipelines.evaluation import ContigAnalyzer, EvaluationConfig
 from .pipelines.preprocess import run_preprocess
 from .pipelines.summary import process_files
-from .pipelines.workflow import PipelineConfig, run_pipeline
+
+# from .pipelines.workflow import PipelineConfig, run_pipeline
 from .utils import is_fastq_file, preset_setting, setup_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,9 +83,31 @@ def build_parser() -> argparse.ArgumentParser:
     assemble.add_argument("--threads", type=int, default=10)
     assemble.add_argument("--preset", help="Assembler preset override")
     assemble.add_argument("--polish", action="store_true")
-    assemble.add_argument("--short-reads1")
-    assemble.add_argument("--short-reads2")
-    assemble.add_argument("--checkm2-db", help="CheckM2 database path", required=False)
+    assemble.add_argument(
+        "--polish-path",
+        help="Set the output path for polishing results manually. If not set, defaults to <output>/polish",
+        default=None,
+    )
+    assemble.add_argument(
+        "--short-reads1",
+        help="Path to paired short reads file (forward)",
+        required=False,
+    )
+    assemble.add_argument(
+        "--short-reads2",
+        help="Path to paired short reads file (reverse)",
+        required=False,
+    )
+    assemble.add_argument(
+        "--checkm2-db",
+        help="CheckM2 database path. Enable completeness-aware strategy post-assembly if provided",
+        required=False,
+    )
+    assemble.add_argument(
+        "--subset-path",
+        help="Set the output path for  completeness-aware strategy post-assembly. Defaults to <output>/subset_contigs.",
+        default=None,
+    )
 
     evaluation = subparsers.add_parser("evaluate", help="Run contig evaluation")
     evaluation.add_argument("assembly", help="Assembly FASTA")
@@ -163,29 +186,29 @@ def build_parser() -> argparse.ArgumentParser:
         required=False,
     )
 
-    pipeline = subparsers.add_parser(
-        "pipeline", help="Run the full end-to-end workflow"
-    )
-    pipeline.add_argument("input", help="FASTQ or FASTA input")
-    pipeline.add_argument("output", help="Output directory")
-    pipeline.add_argument("--threads", type=int, default=10)
-    pipeline.add_argument(
-        "--sequencing-tech",
-        choices=["HiFi", "NanoPore", "CycloneSEQ"],
-        default="CycloneSEQ",
-    )
-    pipeline.add_argument("--assembler", nargs="+", default=["metaflye"])
-    pipeline.add_argument("--downsample", type=parse_size)
-    pipeline.add_argument("--min-length", type=int, default=1000)
-    pipeline.add_argument("--min-quality", type=int, default=7)
-    pipeline.add_argument("--host-reference")
-    pipeline.add_argument("--polish", action="store_true")
-    pipeline.add_argument("--short-reads1")
-    pipeline.add_argument("--short-reads2")
-    pipeline.add_argument("--database")
-    pipeline.add_argument("--reference")
-    pipeline.add_argument("--assembly-info")
-    pipeline.add_argument("--classify-tool", default="skani")
+    # pipeline = subparsers.add_parser(
+    #     "pipeline", help="Run the full end-to-end workflow"
+    # )
+    # pipeline.add_argument("input", help="FASTQ or FASTA input")
+    # pipeline.add_argument("output", help="Output directory")
+    # pipeline.add_argument("--threads", type=int, default=10)
+    # pipeline.add_argument(
+    #     "--sequencing-tech",
+    #     choices=["HiFi", "NanoPore", "CycloneSEQ"],
+    #     default="CycloneSEQ",
+    # )
+    # pipeline.add_argument("--assembler", nargs="+", default=["metaflye"])
+    # pipeline.add_argument("--downsample", type=parse_size)
+    # pipeline.add_argument("--min-length", type=int, default=1000)
+    # pipeline.add_argument("--min-quality", type=int, default=7)
+    # pipeline.add_argument("--host-reference")
+    # pipeline.add_argument("--polish", action="store_true")
+    # pipeline.add_argument("--short-reads1")
+    # pipeline.add_argument("--short-reads2")
+    # pipeline.add_argument("--database")
+    # pipeline.add_argument("--reference")
+    # pipeline.add_argument("--assembly-info")
+    # pipeline.add_argument("--classify-tool", default="skani")
 
     return parser
 
@@ -216,26 +239,35 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         if not is_fastq_file(args.input):
             parser.error("assemble expects a FASTQ input; use evaluate for FASTA")
         preset = args.preset or preset_setting("CycloneSEQ")[args.assembler]
+        if polish_path := args.polish_path:
+            polish_path = Path(args.polish_path)
+        else:
+            polish_path = Path(args.output) / "polish"
         config = AssemblyConfig(
-            fastq_path=args.input,
-            output_dir=args.output,
+            fastq_path=Path(args.input),
+            output_dir=Path(args.output),
             assembler=args.assembler,
             threads=args.threads,
             preset=preset,
             polish=args.polish,
-            short_reads1=args.short_reads1,
-            short_reads2=args.short_reads2,
+            polish_dir=polish_path,
+            short_reads1=Path(args.short_reads1) if args.short_reads1 else None,
+            short_reads2=Path(args.short_reads2) if args.short_reads2 else None,
         )
         result = AssemblyRunner(config).run()
-        _LOGGER.info("Assembly completed: %s", result.fasta_path)
+        _LOGGER.info("Assembly completed: %s", str(result.fasta_path))
         # Completeness-aware strategy
         # Long contigs >500kb with >= 93% are move to the final MAG set, one contig per MAG
         # Only if CheckM2 database is provided
         if args.checkm2_db:
+            if subset_path := args.subset_path:
+                subset_dir = Path(subset_path)
+            else:
+                subset_dir = Path(args.output) / "subset_contigs"
             evaluation = ContigAnalyzer(
                 EvaluationConfig(
                     assembly_fasta=result.fasta_path,
-                    output_dir=args.output,
+                    output_dir=str(subset_dir),
                     assembler=args.assembler,
                     threads=args.threads,
                     database_path=args.checkm2_db,
@@ -253,12 +285,13 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
                     "%s high-quality contigs identified for MAGs",
                     len(high_quality_contigs),
                 )
-                mag_dir = Path(args.output) / "scMAGs"
+                mag_dir = subset_dir / "scMAGs"
                 mag_dir.mkdir(parents=True, exist_ok=True)
-                tobe_binned_assembly = Path(args.output) / "to_be_binned.fasta"
-                with open(result.fasta_path) as asm_handle, open(
-                    tobe_binned_assembly, "w"
-                ) as bin_handle:
+                tobe_binned_assembly = subset_dir / "to_be_binned.fasta"
+                with (
+                    open(result.fasta_path) as asm_handle,
+                    open(tobe_binned_assembly, "w") as bin_handle,
+                ):
                     for record in SeqIO.parse(asm_handle, "fasta"):
                         cid = record.description.split()[0]
                         if cid in high_quality_contigs:
@@ -279,6 +312,12 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
                 )
             else:
                 _LOGGER.info("No high-quality contigs identified for MAGs")
+                # All contigs copied to the to_be_binned.fasta
+                tobe_binned_assembly = subset_dir / "to_be_binned.fasta"
+                Path(tobe_binned_assembly).write_text(
+                    Path(result.fasta_path).read_text()
+                )
+                _LOGGER.info("All contigs written to %s", tobe_binned_assembly)
         return
 
     if args.command == "evaluate":
@@ -370,26 +409,26 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         _LOGGER.info("Summary written to %s", result)
         return
 
-    if args.command == "pipeline":
-        config = PipelineConfig(
-            input_path=args.input,
-            output_dir=args.output,
-            threads=args.threads,
-            sequencing_technology=args.sequencing_tech,
-            assemblers=args.assembler,
-            downsample_bases=args.downsample,
-            filter_min_length=args.min_length,
-            filter_min_quality=args.min_quality,
-            host_reference=args.host_reference,
-            polish=args.polish,
-            short_reads1=args.short_reads1,
-            short_reads2=args.short_reads2,
-            database=args.database,
-            reference=args.reference,
-            assembly_info=args.assembly_info,
-            classify_tool=args.classify_tool,
-        )
-        run_pipeline(config)
-        return
+    # if args.command == "pipeline":
+    #     config = PipelineConfig(
+    #         input_path=args.input,
+    #         output_dir=args.output,
+    #         threads=args.threads,
+    #         sequencing_technology=args.sequencing_tech,
+    #         assemblers=args.assembler,
+    #         downsample_bases=args.downsample,
+    #         filter_min_length=args.min_length,
+    #         filter_min_quality=args.min_quality,
+    #         host_reference=args.host_reference,
+    #         polish=args.polish,
+    #         short_reads1=args.short_reads1,
+    #         short_reads2=args.short_reads2,
+    #         database=args.database,
+    #         reference=args.reference,
+    #         assembly_info=args.assembly_info,
+    #         classify_tool=args.classify_tool,
+    #     )
+    #     run_pipeline(config)
+    #     return
 
     parser.error(f"Unknown command: {args.command}")

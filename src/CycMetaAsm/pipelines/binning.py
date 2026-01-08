@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from ..utils import checkpoint, clear_directory, mark_done, run_cmd
 
@@ -33,7 +32,7 @@ class BinningResult:
 
 
 def run_binning(config: BinningConfig) -> BinningResult:
-    output_dir = Path(config.output_dir) / "Binning" / config.assembler
+    output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     if checkpoint(output_dir):
         _LOGGER.info("Binning already completed for %s", config.assembler)

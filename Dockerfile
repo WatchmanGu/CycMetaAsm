@@ -15,7 +15,7 @@ RUN set -eux; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
-      bash \
+      time \
       coreutils \
       wget \
       curl \
