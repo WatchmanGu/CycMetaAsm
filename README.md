@@ -15,11 +15,13 @@
 CycMetaAsm is a comprehensive bioinformatics pipeline designed for processing long-read metagenomic sequencing data from the CycloneSEQ platform. It automates the complete workflow from raw data quality control through metagenome assembly, binning, and taxonomic classification to generate high-quality Metagenome-Assembled Genomes (MAGs) with taxonomic annotations and abundance profiles.
 
 **Target Users:**
+
 - Bioinformatics researchers working with metagenomic data
 - Microbiome scientists analyzing complex microbial communities
 - CycloneSEQ platform users requiring automated analysis pipelines
 
 **Supported Data Types:**
+
 - Long-read sequencing data (FASTQ/FASTQ.gz format)
   - CycloneSEQ native format (optimized)
   - PacBio HiFi reads
@@ -30,66 +32,88 @@ CycMetaAsm is a comprehensive bioinformatics pipeline designed for processing lo
 
 ### 1.2 High-Level Pipeline Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     INPUT: Raw FASTQ (Long Reads)                   │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  MODULE 1: PREPROCESSING                                            │
-│  ├─ Quality Control (Rosa - optional external)                      │
-│  ├─ Downsampling (optional, seed=1005)                              │
-│  ├─ Quality Filtering (chopper: length ≥1000bp, Q≥7)                │
-│  └─ Host Removal (minimap2 + samtools: CycloneSEQ preset)           │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  MODULE 2: ASSEMBLY                                                 │
-│  ├─ Assembly (metaFlye --meta, --nano-raw preset)                   │
-│  └─ Optional Polishing (NextPolish with long+short reads)           │
-│     ├─ Short-read QC (fastp, if short reads provided)               │
-│     └─ NextPolish (task=best, min_read_len=1000)                    │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  MODULE 3: EVALUATION & CONTIG SELECTION                            │
-│  (Completeness-Aware Strategy, if CheckM2 DB provided)              │
-│  ├─ CheckM2 Quality Assessment (contigs ≥500kb)                     │
-│  ├─ Extract scMAGs: Completeness ≥93% & Length ≥500kb               │
-│  │  → Output: scMAGs/*.fa + scMAGs_info.tsv                         │
-│  └─ Remaining contigs → to_be_binned.fasta                          │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  MODULE 4: BINNING                                                  │
-│  ├─ Read Alignment (minimap2 + samtools sort/index)                 │
-│  ├─ SemiBin2 Binning (seed=1005, long_read mode, environment model) │
-│  └─ CheckM2 on Bins (completeness/contamination assessment)         │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  MODULE 5: CLASSIFICATION                                           │
-│  └─ Taxonomic Assignment (skani search with GTDB, min_af=50%)       │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  MODULE 6: SUMMARIZATION                                            │
-│  ├─ Abundance Profiling (Sylph with MAGs)                           │
-│  ├─ Quality Ranking (High/Medium/Low based on CheckM2 scores)       │
-│  ├─ Visualization (Plotly sunburst, Matplotlib plots)               │
-│  └─ Summary Tables (TSV: MAG quality, taxonomy, abundance)          │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  OUTPUT: MAGs + Quality Reports + Taxonomic Profiles + Plots       │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    %% Input
+    INPUT([INPUT: Raw FASTQ Long Reads]) --> M1_1
+
+    %% Module 1
+    subgraph M1 [MODULE 1: PREPROCESSING]
+        direction TB
+        M1_1[Quality Control<br/>Rosa - optional/external]
+        M1_2[Downsampling<br/>optional, seed=1005]
+        M1_3[Quality Filtering<br/>chopper: length ≥1000bp, Q≥7]
+        M1_4[Host Removal<br/>minimap2 + samtools: CycloneSEQ preset]
+        
+        M1_1 --> M1_2 --> M1_3 --> M1_4
+    end
+
+    M1_4 --> M2_1
+
+    %% Module 2
+    subgraph M2 [MODULE 2: ASSEMBLY]
+        direction TB
+        M2_1[Assembly<br/>metaFlye --meta, --nano-raw preset]
+        M2_2[Optional Polishing<br/>NextPolish with long+short reads]
+        
+        M2_1 --> M2_2
+    end
+
+    M2_2 --> M3_1
+
+    %% Module 3
+    subgraph M3 [MODULE 3: EVALUATION & CONTIG SELECTION]
+        direction TB
+        M3_Title[Completeness-Aware Strategy<br/>if CheckM2 DB provided]:::title
+        M3_1[CheckM2 Quality Assessment<br/>contigs ≥500kb]
+        M3_2[Extract scMAGs<br/>Completeness ≥93% & Length ≥500kb]
+        M3_Out[Output: scMAGs/*.fa + scMAGs_info.tsv]
+        M3_Rem[Remaining contigs<br/>to_be_binned.fasta]
+        
+        M3_Title -.- M3_1
+        M3_1 --> M3_2
+        M3_2 -- scMAGs --> M3_Out
+        M3_2 -- Residual --> M3_Rem
+    end
+
+    M3_Rem --> M4_1
+
+    %% Module 4
+    subgraph M4 [MODULE 4: BINNING]
+        direction TB
+        M4_1[Read Alignment<br/>minimap2 + samtools sort/index]
+        M4_2[SemiBin2 Binning<br/>seed=1005, long_read mode]
+        M4_3[CheckM2 on Bins<br/>completeness/contamination assessment]
+        
+        M4_1 --> M4_2 --> M4_3
+    end
+
+    M4_3 --> M5_1
+
+    %% Module 5
+    subgraph M5 [MODULE 5: CLASSIFICATION]
+        direction TB
+        M5_1[Taxonomic Assignment<br/>skani search with GTDB, min_af=50%]
+    end
+
+    M5_1 --> M6_1
+    M3_Out -.-> M6_1
+
+    %% Module 6
+    subgraph M6 [MODULE 6: SUMMARIZATION]
+        direction TB
+        M6_1[Abundance Profiling<br/>Sylph with MAGs]
+        M6_2[Quality Ranking<br/>High/Medium/Low based on CheckM2 scores]
+        M6_3[Visualization<br/>Plotly sunburst, Matplotlib plots]
+        M6_4[Summary Tables<br/>TSV: MAG quality, taxonomy, abundance]
+        
+        M6_1 --> M6_2 --> M6_3 --> M6_4
+    end
+
+    M6_4 --> OUTPUT([OUTPUT: MAGs + Quality Reports + Taxonomic Profiles + Plots])
+
+    %% Styling
+    classDef title fill:none,stroke:none,color:#666;
 ```
 
 ---
