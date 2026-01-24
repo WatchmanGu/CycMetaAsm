@@ -4,11 +4,11 @@ task bin_and_checkm2 {
   input {
     File raw_contigs
     File reads_fastq
-    Int threads = 16
+    Int threads = 10
     String assembler = "metaflye"
     String sequencing_tech = "CycloneSEQ"
     String binning_mode = "global"
-    File checkm2_db_path
+    File? checkm2_db_path
   }
 
   command <<<
@@ -23,7 +23,13 @@ task bin_and_checkm2 {
       --threads ~{threads} \
       --sequencing-tech ~{sequencing_tech} \
       --binning-model ~{binning_mode} \
-      --checkm2-db ~{checkm2_db_path}
+      ~{if defined(checkm2_db_path) then "--checkm2-db " + checkm2_db_path else ""}
+    
+    # If checkm2_db_path is not provided, create an empty quality report
+    if [[ ~{defined(checkm2_db_path)} == "false" ]]; then
+      mkdir -p work/evaluation/~{assembler}_bins/checkm2
+      echo -e "Name\tCompleteness\tContamination\tContig_N50\tTotal_Contigs\tGenome_Size" > work/evaluation/~{assembler}_bins/checkm2/quality_report.tsv
+    fi
   >>>
 
   output {

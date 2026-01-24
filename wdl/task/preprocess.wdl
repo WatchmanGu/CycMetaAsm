@@ -5,7 +5,7 @@ task preprocess {
     Int threads = 10
     String sequencing_tech = "CycloneSEQ"
     Int min_length = 1000
-    Int min_quality = 10
+    Int min_quality = 7
     File? host_reference
     Float? downsample
   }

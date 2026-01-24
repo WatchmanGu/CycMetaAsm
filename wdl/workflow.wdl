@@ -14,10 +14,10 @@ workflow CycMetaAsmWorkflow {
     Int threads = 40
     String sequencing_tech = "CycloneSEQ"
     String assembler = "metaflye"
-    File checkm2_db_path
+    File? checkm2_db_path
     File? skani_database
     Int min_length = 1000
-    Int min_quality = 10
+    Int min_quality = 7
     Boolean polish = false
     File? short_reads1
     File? short_reads2
@@ -25,6 +25,7 @@ workflow CycMetaAsmWorkflow {
     Float? downsample
     String binning_mode = "global"
     String classify_tool = "skani"
+    Float classify_ass2ref = 0.5
   }
 
   call PP.RunRosa as raw_rosa_step {
@@ -78,10 +79,11 @@ workflow CycMetaAsmWorkflow {
       input:
         bins = bin_step.bins,
         scMAGs = assemble_step.scMAGs,
-        skani_database = skani_database,
+        skani_database = select_first([skani_database]),
         threads = threads,
         assembler = assembler,
-        tool = classify_tool
+        tool = classify_tool,
+        ass2ref = classify_ass2ref
     }
   }
 
