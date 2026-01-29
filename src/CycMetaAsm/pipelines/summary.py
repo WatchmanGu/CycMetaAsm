@@ -125,7 +125,7 @@ def process_files(
     if len(passed_mag_list) == 0:
         _LOGGER.warning(
             "No high-quality or medium-quality MAGs detected. "
-            "Skipping species classification and abundance estimation steps."
+            "Abundance estimation will be skipped."
         )
     
     if mag_path is not None:

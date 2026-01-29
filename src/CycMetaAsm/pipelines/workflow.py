@@ -40,8 +40,8 @@ class PipelineConfig:
     short_reads1: Optional[str] = None
     short_reads2: Optional[str] = None
     
-    # CheckM2 database for quality assessment
-    checkm2_db: Optional[str] = None
+    # CheckM2 database for quality assessment (required)
+    checkm2_db: str
     
     # Binning parameters
     binning_mode: str = "global"
@@ -211,23 +211,18 @@ def run_pipeline(config: PipelineConfig) -> None:
     intermediate_files.append(binning_dir / "aligned.bam.bai")
     
     # Run CheckM2 on bins
-    if config.checkm2_db:
-        _LOGGER.info("Running CheckM2 on bins...")
-        evaluation = ContigAnalyzer(
-            EvaluationConfig(
-                assembly_fasta=binning_result.bins_directory,
-                output_dir=str(binning_dir),
-                assembler=f"{config.assembler}_bins",
-                threads=config.threads,
-                database_path=config.checkm2_db,
-            )
+    _LOGGER.info("Running CheckM2 on bins...")
+    evaluation = ContigAnalyzer(
+        EvaluationConfig(
+            assembly_fasta=binning_result.bins_directory,
+            output_dir=str(binning_dir),
+            assembler=f"{config.assembler}_bins",
+            threads=config.threads,
+            database_path=config.checkm2_db,
         )
-        quality_report = evaluation.run_checkm2()
-        _LOGGER.info("CheckM2 quality report: %s", quality_report)
-    else:
-        # No CheckM2 database provided
-        _LOGGER.error("CheckM2 database is required for the pipeline")
-        raise ValueError("CheckM2 database must be provided via --checkm2-db")
+    )
+    quality_report = evaluation.run_checkm2()
+    _LOGGER.info("CheckM2 quality report: %s", quality_report)
     
     # ========== STEP 5: Classification ==========
     classification_result = None
@@ -241,13 +236,14 @@ def run_pipeline(config: PipelineConfig) -> None:
         all_mags_dir = classify_dir / "all_mags"
         all_mags_dir.mkdir(parents=True, exist_ok=True)
         
-        # Copy bins
-        for bin_file in Path(binning_result.bins_directory).glob("*.fa"):
+        # Copy bins (both .fa and .fasta extensions)
+        for bin_file in list(Path(binning_result.bins_directory).glob("*.fa")) + \
+                         list(Path(binning_result.bins_directory).glob("*.fasta")):
             shutil.copy2(bin_file, all_mags_dir / bin_file.name)
         
         # Copy scMAGs if available
         if scmags_dir:
-            for mag_file in scmags_dir.glob("*.fa"):
+            for mag_file in list(scmags_dir.glob("*.fa")) + list(scmags_dir.glob("*.fasta")):
                 shutil.copy2(mag_file, all_mags_dir / mag_file.name)
         
         classifier = Classifier(
@@ -280,13 +276,14 @@ def run_pipeline(config: PipelineConfig) -> None:
     all_mags_for_summary = summary_dir / "all_mags"
     all_mags_for_summary.mkdir(parents=True, exist_ok=True)
     
-    # Copy bins
-    for bin_file in Path(binning_result.bins_directory).glob("*.fa"):
+    # Copy bins (both .fa and .fasta extensions)
+    for bin_file in list(Path(binning_result.bins_directory).glob("*.fa")) + \
+                     list(Path(binning_result.bins_directory).glob("*.fasta")):
         shutil.copy2(bin_file, all_mags_for_summary / bin_file.name)
     
     # Copy scMAGs if available
     if scmags_dir:
-        for mag_file in scmags_dir.glob("*.fa"):
+        for mag_file in list(scmags_dir.glob("*.fa")) + list(scmags_dir.glob("*.fasta")):
             shutil.copy2(mag_file, all_mags_for_summary / mag_file.name)
     
     summary_result = process_files(
