@@ -94,7 +94,7 @@ workflow CycMetaAsmWorkflow {
       scMAGs_info = assemble_step.scMAGs_info,
       bins = bin_step.bins,
       bins_quality_report = bin_step.quality_report,
-      classification_tsv = classify_step.classify_result,
+      classification_tsv = if defined(classify_step.classify_result) then classify_step.classify_result else None,
       fastq = preprocess_step.clean_fastq,
       threads = threads
   }
