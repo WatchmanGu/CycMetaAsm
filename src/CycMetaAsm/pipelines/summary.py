@@ -47,7 +47,7 @@ def process_files(
     ]
     # TODO: scmag_info maybe None if not assigned in arguments
     df_scmag_info = (
-        _parse_scMAGs_info(scmag_info) if Path(scmag_info).exists() else None
+        _parse_scMAGs_info(scmag_info) if scmag_info and Path(scmag_info).exists() else None
     )
     if df_scmag_info is not None:
         selected = pd.concat([selected, df_scmag_info], ignore_index=True)
