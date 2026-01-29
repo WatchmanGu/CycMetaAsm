@@ -7,8 +7,8 @@ task summarize_results {
     Array[File] bins
     File bins_quality_report
     File? classification_tsv
-    File fastq
-    Int threads = 16
+    File? fastq
+    Int threads = 10
   }
 
   # Turn optional Array[File]? into a concrete Array[File] (possibly empty)
@@ -31,7 +31,7 @@ task summarize_results {
       ~{if defined(classification_tsv) then "--classification " + classification_tsv else ""} \
       --mag-path all_mags \
       ~{if defined(scMAGs_info) then "--scmag-info " + scMAGs_info else ""} \
-      --fastq-file ~{fastq} \
+      ~{if defined(fastq) then "--fastq-file " + fastq else ""} \
       --threads ~{threads}
   >>>
 

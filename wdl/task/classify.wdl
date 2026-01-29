@@ -4,10 +4,11 @@ task classify_bins {
   input {
     Array[File] bins
     Array[File]? scMAGs
-    File? skani_database
-    Int threads = 16
+    File skani_database
+    Int threads = 10
     String assembler = "metaflye"
     String tool = "skani"
+    Float ass2ref = 0.5
   }
 
   command <<<
@@ -27,7 +28,8 @@ task classify_bins {
       --threads ~{threads} \
       --database ~{skani_database} \
       --metadata ~{skani_database}/metadata.tsv \
-      --tool ~{tool}
+      --tool ~{tool} \
+      --ass2ref ~{ass2ref}
   >>>
 
   output {
