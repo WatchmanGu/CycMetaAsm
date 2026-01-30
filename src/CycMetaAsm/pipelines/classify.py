@@ -100,9 +100,22 @@ class Classifier:
             _LOGGER.info("skani classification already completed")
             return ClassificationResult(str(result), str(dedup))
 
-        bins = list(Path(self.config.bins_dir).glob("*"))
+        bins = list(Path(self.config.bins_dir).glob("*.fa")) + list(Path(self.config.bins_dir).glob("*.fasta"))
         if not bins:
-            raise FileNotFoundError(f"No bins found under {self.config.bins_dir}")
+            _LOGGER.warning(
+                "No bins found under %s, skipping species classification. "
+                "This may happen when no high-quality MAGs are available.",
+                self.config.bins_dir
+            )
+            # Create empty classification files so downstream steps can proceed
+            empty_df = pd.DataFrame(columns=[
+                "Reference", "MAG_ID", "ANI", "Num_contigs", "Taxonomy",
+                "Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species"
+            ])
+            empty_df.to_csv(result, sep="\t", index=False)
+            empty_df.to_csv(dedup, sep="\t", index=False)
+            mark_done(self.classify_dir)
+            return ClassificationResult(str(result), str(dedup))
 
         metadata = self._load_gtdb_metadata()
         cmd = [

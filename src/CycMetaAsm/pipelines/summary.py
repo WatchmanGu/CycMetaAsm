@@ -47,7 +47,7 @@ def process_files(
     ]
     # TODO: scmag_info maybe None if not assigned in arguments
     df_scmag_info = (
-        _parse_scMAGs_info(scmag_info) if Path(scmag_info).exists() else None
+        _parse_scMAGs_info(scmag_info) if scmag_info and Path(scmag_info).exists() else None
     )
     if df_scmag_info is not None:
         selected = pd.concat([selected, df_scmag_info], ignore_index=True)
@@ -55,6 +55,9 @@ def process_files(
         df_classify = pd.read_csv(classification, sep="\t")
         merged = selected.merge(df_classify, on="MAG_ID", how="left")
     else:
+        _LOGGER.info(
+            "Species classification data not provided, skipping taxonomic annotation"
+        )
         merged = selected
 
     columns = [
@@ -117,6 +120,14 @@ def process_files(
     )
     lowquality_mag_list = merged[merged["Quality_rank"] == "Low"]["MAG_ID"].tolist()
     _LOGGER.info("%d MAGs are low quality", len(lowquality_mag_list))
+    
+    # Check if we have any passed quality MAGs
+    if len(passed_mag_list) == 0:
+        _LOGGER.warning(
+            "No high-quality or medium-quality MAGs detected. "
+            "Abundance estimation will be skipped."
+        )
+    
     if mag_path is not None:
         # Save MAG files by quality lists separately
         (Path(outdir) / "passed_quality_mags").mkdir(exist_ok=True)
@@ -130,10 +141,14 @@ def process_files(
             else:
                 continue
             run_cmd(["cp", "-L", str(mag_file), str(dest)])
-        # Generate abundance profile if fastq_file is provided
+        # Generate abundance profile if fastq_file is provided and we have passed MAGs
         if fastq_file is None:
             _LOGGER.warning(
                 "FASTQ file not provided, skipping abundance profile generation"
+            )
+        elif len(passed_mag_list) == 0:
+            _LOGGER.info(
+                "No passed quality MAGs available, skipping abundance profile generation"
             )
         else:
             df_abundance = _run_sylph(

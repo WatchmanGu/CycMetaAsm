@@ -21,8 +21,7 @@ from .pipelines.classify import ClassificationConfig, Classifier
 from .pipelines.evaluation import ContigAnalyzer, EvaluationConfig
 from .pipelines.preprocess import run_preprocess
 from .pipelines.summary import process_files
-
-# from .pipelines.workflow import PipelineConfig, run_pipeline
+from .pipelines.workflow import PipelineConfig, run_pipeline
 from .utils import is_fastq_file, preset_setting, setup_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -186,29 +185,55 @@ def build_parser() -> argparse.ArgumentParser:
         required=False,
     )
 
-    # pipeline = subparsers.add_parser(
-    #     "pipeline", help="Run the full end-to-end workflow"
-    # )
-    # pipeline.add_argument("input", help="FASTQ or FASTA input")
-    # pipeline.add_argument("output", help="Output directory")
-    # pipeline.add_argument("--threads", type=int, default=10)
-    # pipeline.add_argument(
-    #     "--sequencing-tech",
-    #     choices=["HiFi", "NanoPore", "CycloneSEQ"],
-    #     default="CycloneSEQ",
-    # )
-    # pipeline.add_argument("--assembler", nargs="+", default=["metaflye"])
-    # pipeline.add_argument("--downsample", type=parse_size)
-    # pipeline.add_argument("--min-length", type=int, default=1000)
-    # pipeline.add_argument("--min-quality", type=int, default=7)
-    # pipeline.add_argument("--host-reference")
-    # pipeline.add_argument("--polish", action="store_true")
-    # pipeline.add_argument("--short-reads1")
-    # pipeline.add_argument("--short-reads2")
-    # pipeline.add_argument("--database")
-    # pipeline.add_argument("--reference")
-    # pipeline.add_argument("--assembly-info")
-    # pipeline.add_argument("--classify-tool", default="skani")
+    pipeline = subparsers.add_parser(
+        "pipeline", help="Run the full end-to-end workflow"
+    )
+    pipeline.add_argument("input", help="FASTQ input")
+    pipeline.add_argument("output", help="Output directory")
+    pipeline.add_argument("--threads", type=int, default=10)
+    pipeline.add_argument(
+        "--sequencing-tech",
+        choices=["HiFi", "NanoPore", "CycloneSEQ"],
+        default="CycloneSEQ",
+        help="Sequencing technology preset",
+    )
+    pipeline.add_argument("--assembler", default="metaflye", help="Assembler to use")
+    pipeline.add_argument("--downsample", type=parse_size, help="Target bases, e.g. 10G")
+    pipeline.add_argument("--min-length", type=int, default=1000, help="Minimum read length")
+    pipeline.add_argument("--min-quality", type=int, default=7, help="Minimum read quality")
+    pipeline.add_argument("--host-reference", help="Reference fasta for host removal")
+    pipeline.add_argument("--polish", action="store_true", help="Enable polishing")
+    pipeline.add_argument("--short-reads1", help="Path to paired short reads file (forward)")
+    pipeline.add_argument("--short-reads2", help="Path to paired short reads file (reverse)")
+    pipeline.add_argument("--checkm2-db", required=True, help="CheckM2 database path (required)")
+    pipeline.add_argument(
+        "--binning-model",
+        choices=[
+            "human_gut",
+            "dog_gut",
+            "ocean",
+            "soil",
+            "cat_gut",
+            "human_oral",
+            "mouse_gut",
+            "pig_gut",
+            "built_environment",
+            "wastewater",
+            "chicken_caecum",
+            "global",
+        ],
+        default="global",
+        help="SemiBin2 binning model",
+    )
+    pipeline.add_argument("--skani-database", help="Skani database path for classification")
+    pipeline.add_argument("--skani-metadata", help="Skani metadata TSV for classification")
+    pipeline.add_argument("--classify-tool", default="skani", help="Classification tool")
+    pipeline.add_argument("--classify-ass2ref", type=float, default=0.5, help="Assembly to reference ratio")
+    pipeline.add_argument(
+        "--keep-intermediate-files",
+        action="store_true",
+        help="Keep intermediate files (FASTQ, BAM, temp files). By default, they are removed to save space.",
+    )
 
     return parser
 
@@ -409,26 +434,31 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         _LOGGER.info("Summary written to %s", result)
         return
 
-    # if args.command == "pipeline":
-    #     config = PipelineConfig(
-    #         input_path=args.input,
-    #         output_dir=args.output,
-    #         threads=args.threads,
-    #         sequencing_technology=args.sequencing_tech,
-    #         assemblers=args.assembler,
-    #         downsample_bases=args.downsample,
-    #         filter_min_length=args.min_length,
-    #         filter_min_quality=args.min_quality,
-    #         host_reference=args.host_reference,
-    #         polish=args.polish,
-    #         short_reads1=args.short_reads1,
-    #         short_reads2=args.short_reads2,
-    #         database=args.database,
-    #         reference=args.reference,
-    #         assembly_info=args.assembly_info,
-    #         classify_tool=args.classify_tool,
-    #     )
-    #     run_pipeline(config)
-    #     return
+    if args.command == "pipeline":
+        if not is_fastq_file(args.input):
+            parser.error("pipeline requires a FASTQ input")
+        config = PipelineConfig(
+            input_path=args.input,
+            output_dir=args.output,
+            threads=args.threads,
+            sequencing_technology=args.sequencing_tech,
+            assembler=args.assembler,
+            downsample_bases=args.downsample,
+            filter_min_length=args.min_length,
+            filter_min_quality=args.min_quality,
+            host_reference=args.host_reference,
+            polish=args.polish,
+            short_reads1=args.short_reads1,
+            short_reads2=args.short_reads2,
+            checkm2_db=args.checkm2_db,
+            binning_mode=args.binning_model,
+            skani_database=args.skani_database,
+            skani_metadata=args.skani_metadata,
+            classify_tool=args.classify_tool,
+            classify_ass2ref=args.classify_ass2ref,
+            clean_intermediate_files=not args.keep_intermediate_files,
+        )
+        run_pipeline(config)
+        return
 
     parser.error(f"Unknown command: {args.command}")
