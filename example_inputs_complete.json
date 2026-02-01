@@ -1,0 +1,20 @@
+{
+  "CycMetaAsmWorkflow.report_config_yaml": "report_config.yaml",
+  "CycMetaAsmWorkflow.sample_id": "test_sample",
+  "CycMetaAsmWorkflow.input_fastq": "input.fastq.gz",
+  "CycMetaAsmWorkflow.threads": 40,
+  "CycMetaAsmWorkflow.sequencing_tech": "CycloneSEQ",
+  "CycMetaAsmWorkflow.assembler": "metaflye",
+  "CycMetaAsmWorkflow.checkm2_db_path": "/path/to/checkm2_db",
+  "CycMetaAsmWorkflow.skani_database": "/path/to/skani_db",
+  "CycMetaAsmWorkflow.min_length": 1000,
+  "CycMetaAsmWorkflow.min_quality": 7,
+  "CycMetaAsmWorkflow.polish": true,
+  "CycMetaAsmWorkflow.short_reads1": "short_reads_R1.fastq.gz",
+  "CycMetaAsmWorkflow.short_reads2": "short_reads_R2.fastq.gz",
+  "CycMetaAsmWorkflow.host_reference": "host_genome.fasta",
+  "CycMetaAsmWorkflow.downsample": 10.0,
+  "CycMetaAsmWorkflow.binning_mode": "global",
+  "CycMetaAsmWorkflow.classify_tool": "skani",
+  "CycMetaAsmWorkflow.classify_ass2ref": 0.5
+}
