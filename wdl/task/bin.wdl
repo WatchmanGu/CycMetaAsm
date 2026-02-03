@@ -27,14 +27,14 @@ task bin_and_checkm2 {
     
     # If checkm2_db_path is not provided, create an empty quality report
     if [[ ~{defined(checkm2_db_path)} == "false" ]]; then
-      mkdir -p work/evaluation/~{assembler}_bins/checkm2
-      echo -e "Name\tCompleteness\tContamination\tContig_N50\tTotal_Contigs\tGenome_Size" > work/evaluation/~{assembler}_bins/checkm2/quality_report.tsv
+      mkdir -p work/checkm2
+      echo -e "Name\tCompleteness\tContamination\tContig_N50\tTotal_Contigs\tGenome_Size" > work/checkm2/quality_report.tsv
     fi
   >>>
 
   output {
-    Array[File] bins = glob("work/Binning/~{assembler}/output_bins/SemiBin_*.fa")
-    File quality_report = "work/evaluation/~{assembler}_bins/checkm2/quality_report.tsv"
+    Array[File] bins = glob("work/output_bins/SemiBin_*.fa")
+    File quality_report = "work/checkm2/quality_report.tsv"
   }
 
   runtime {

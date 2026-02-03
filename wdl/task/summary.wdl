@@ -87,7 +87,7 @@ task make_report {
     mv results ~{sample_id}_CycMetaAsm_Results
     zip -r ~{sample_id}_CycMetaAsm_Results.zip ~{sample_id}_CycMetaAsm_Results/
     echo "Results zipped."
-    paste -d "\t" <(echo -e "Sample_id\t~{sample_id}") ~{mag_quality_table} > summary.txt
+    paste -d "\t" <(echo -e "Sample_id\n~{sample_id}") ~{mag_quality_table} > summary.txt
   >>>
 
   output {

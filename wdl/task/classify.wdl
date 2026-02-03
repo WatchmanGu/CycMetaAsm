@@ -33,7 +33,7 @@ task classify_bins {
   >>>
 
   output {
-    File classify_result = "work/classify/~{assembler}/classify_result_deduplicated.tsv"
+    File classify_result = "work/classify_result_deduplicated.tsv"
   }
 
   runtime {
