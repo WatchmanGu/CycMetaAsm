@@ -64,7 +64,7 @@ task preprocess {
   }
 
   runtime {
-    docker: "cycmetaasm:v1.0.0"
+    docker: "cycmetaasm:v1.1.0"
     cpu: threads + 2
     memory: "80G"
   }
@@ -110,7 +110,7 @@ task RunRosa{
     }
 
     runtime {
-        docker: "rosa:0.2.14.0"
+        docker: "cycmetaasm:v1.1.0"
         cpu: 10
         memory: 32 + "GB"
     }

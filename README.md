@@ -2,7 +2,7 @@
 
 ## Long-read Metagenomic Assembly and MAG Analysis Toolkit
 
-**Version:** 1.0.0.0  
+**Version:** 1.1.0.0
 **Software Type:** Bioinformatics pipeline for metagenomic analysis  
 **Target Platform:** CycloneSEQ long-read sequencing platform
 
@@ -53,7 +53,7 @@ graph TD
     %% Module 2
     subgraph M2 [MODULE 2: ASSEMBLY]
         direction TB
-        M2_1[Assembly<br/>metaFlye --meta, --nano-raw preset]
+        M2_1[Assembly<br/>myloasm default; metaFlye optional]
         M2_2[Optional Polishing<br/>NextPolish with long+short reads]
         
         M2_1 --> M2_2
@@ -82,7 +82,7 @@ graph TD
     subgraph M4 [MODULE 4: BINNING]
         direction TB
         M4_1[Read Alignment<br/>minimap2 + samtools sort/index]
-        M4_2[SemiBin2 Binning<br/>seed=1005, long_read mode]
+        M4_2[Binning<br/>LorBin default; SemiBin2 optional]
         M4_3[CheckM2 on Bins<br/>completeness/contamination assessment]
         
         M4_1 --> M4_2 --> M4_3
@@ -124,12 +124,12 @@ graph TD
 
 | Module Name | Purpose | Inputs | Outputs | Key Parameters | External Tools/Libs | Key Code Entry Points |
 |-------------|---------|--------|---------|----------------|---------------------|----------------------|
-| **Preprocess** | Downsample, filter reads by quality/length, remove host contamination | FASTQ (long reads), optional host reference | Filtered FASTQ | `--downsample` (e.g., "10G"), `--min-length` (default: 1000), `--min-quality` (default: 7), `--threads`, `--sequencing-tech` | `chopper`, `minimap2`, `samtools`, `pigz` | `src/CycMetaAsm/cli.py::parse_args(command='preprocess')`<br>`src/CycMetaAsm/pipelines/preprocess.py::run_preprocess()` |
-| **Assembly** | Assemble metagenomic contigs using long reads; optional polishing with short reads | Cleaned FASTQ (long), optional short-read pair | `assembly.fasta`, `assembly_info.txt`, optional `genome.nextpolish.fasta` | `--assembler` (metaflye/metamdbg), `--threads`, `--preset`, `--polish`, `--short-reads1/2`, `--polish-path` | `flye` (metaFlye), `nextPolish`, `fastp` | `src/CycMetaAsm/cli.py::parse_args(command='assemble')`<br>`src/CycMetaAsm/pipelines/assembly.py::AssemblyRunner.run()` |
-| **Evaluation** | Assess contig completeness/contamination; extract high-quality single-contig MAGs | Assembly FASTA, CheckM2 DB | CheckM2 quality reports, scMAGs (if ≥93% complete & ≥500kb), `to_be_binned.fasta` | `--checkm2-db` (path to CheckM2 database), `--subset-path`, `--threads` | `checkm2` | `src/CycMetaAsm/cli.py::parse_args(command='assemble')` (completeness-aware logic)<br>`src/CycMetaAsm/pipelines/evaluation.py::ContigAnalyzer` |
-| **Binning** | Cluster contigs into genome bins via coverage/composition | Assembly FASTA, cleaned reads FASTQ | Bins directory (`output_bins/*.fasta`), `aligned.bam`, CheckM2 bin quality report | `--binning-model` (e.g., global, human_gut), `--sequencing-tech`, `--checkm2-db`, `--threads` | `minimap2`, `samtools`, `SemiBin2`, `checkm2` | `src/CycMetaAsm/cli.py::parse_args(command='bin')`<br>`src/CycMetaAsm/pipelines/binning.py::run_binning()` |
-| **Classify** | Assign taxonomy to bins/MAGs using reference genomes | Bins directory, skani database, GTDB metadata TSV | `classify_result.tsv`, `classify_result_deduplicated.tsv` | `--tool` (skani), `--database`, `--metadata`, `--ass2ref` (default: 0.5), `--threads` | `skani` | `src/CycMetaAsm/cli.py::parse_args(command='classify')`<br>`src/CycMetaAsm/pipelines/classify.py::Classifier.run()` |
-| **Summarize** | Aggregate quality, taxonomy, abundance; generate plots and ranked tables | CheckM2 quality report TSV, optional classification TSV, MAGs directory, original FASTQ | Summary TSV, quality stats TSV, top-ranked MAG TSV, PNG plots, HTML sunburst | `--classification`, `--mag-path`, `--scmag-info`, `--fastq-file`, `--threads` | `sylph`, `pandas`, `matplotlib`, `seaborn`, `plotly` | `src/CycMetaAsm/cli.py::parse_args(command='summarize')`<br>`src/CycMetaAsm/pipelines/summary.py::process_files()` |
+| **Preprocess** | Downsample, filter reads by quality/length, remove host contamination | FASTQ (long reads), optional host reference | Filtered FASTQ | `--downsample` (e.g., "10G"), `--min-length` (default: 1000), `--min-quality` (default: 7), `--threads`, `--sequencing-tech` | `chopper`, `minimap2`, `samtools`, `pigz` | `src/CycMetaAsm/cli.py::build_parser()`<br>`src/CycMetaAsm/pipelines/preprocess.py::run_preprocess()` |
+| **Assembly** | Assemble metagenomic contigs using long reads; optional polishing with short reads | Cleaned FASTQ (long), optional short-read pair | `assembly.fasta`, `assembly_info.txt`, optional `genome.nextpolish.fasta` | `--assembler` (myloasm/metaflye), `--threads`, `--preset` (metaFlye only), `--polish`, `--short-reads1/2`, `--polish-path` | `myloasm`, `flye` (metaFlye), `nextPolish`, `fastp` | `src/CycMetaAsm/cli.py::build_parser()`<br>`src/CycMetaAsm/pipelines/assembly.py::AssemblyRunner.run()` |
+| **Evaluation** | Assess contig completeness/contamination; extract high-quality single-contig MAGs | Assembly FASTA, CheckM2 DB | CheckM2 quality reports, scMAGs (if ≥93% complete & ≥500kb), `to_be_binned.fasta` | `--checkm2-db` (path to CheckM2 database), `--subset-path`, `--threads` | `checkm2` | `src/CycMetaAsm/cli.py::build_parser()` (completeness-aware logic)<br>`src/CycMetaAsm/pipelines/evaluation.py::ContigAnalyzer` |
+| **Binning** | Cluster contigs into genome bins via coverage/composition | Assembly FASTA, cleaned reads FASTQ | Bins directory (`output_bins/*.fa`), `aligned.bam`, CheckM2 bin quality report | `--binner` (lorbin/semibin2), `--binning-model` (SemiBin2 only), `--sequencing-tech`, `--checkm2-db`, `--threads` | `minimap2`, `samtools`, `LorBin`, `SemiBin2`, `checkm2` | `src/CycMetaAsm/cli.py::build_parser()`<br>`src/CycMetaAsm/pipelines/binning.py::run_binning()` |
+| **Classify** | Assign taxonomy to bins/MAGs using reference genomes | Bins directory, skani database, GTDB metadata TSV | `classify_result.tsv`, `classify_result_deduplicated.tsv` | `--tool` (skani), `--database`, `--metadata`, `--ass2ref` (default: 0.5), `--threads` | `skani` | `src/CycMetaAsm/cli.py::build_parser()`<br>`src/CycMetaAsm/pipelines/classify.py::Classifier.run()` |
+| **Summarize** | Aggregate quality, taxonomy, abundance; generate plots and ranked tables | CheckM2 quality report TSV, optional classification TSV, MAGs directory, original FASTQ | Summary TSV, quality stats TSV, top-ranked MAG TSV, PNG plots, HTML sunburst | `--classification`, `--mag-path`, `--scmag-info`, `--fastq-file`, `--threads` | `sylph`, `pandas`, `matplotlib`, `seaborn`, `plotly` | `src/CycMetaAsm/cli.py::build_parser()`<br>`src/CycMetaAsm/pipelines/summary.py::process_files()` |
 | **Utilities** | Shared helpers: checkpointing, command execution, preset settings | N/A | N/A | Sequencing tech presets (CycloneSEQ, HiFi, NanoPore) | N/A | `src/CycMetaAsm/utils.py::run_cmd()`, `::checkpoint()`, `::preset_setting()` |
 
 ### Module Interface Description
@@ -158,7 +158,7 @@ graph TD
 
 4. **`cycmetaasm bin`**
    - Positional: `assembly` (FASTA), `reads` (FASTQ), `output` (directory)
-   - Options: `--assembler`, `--threads`, `--binning-model`, `--sequencing-tech`, `--checkm2-db`
+   - Options: `--assembler`, `--binner`, `--threads`, `--binning-model`, `--sequencing-tech`, `--checkm2-db`
 
 5. **`cycmetaasm classify`**
    - Positional: `bins` (directory), `output` (directory)
@@ -238,16 +238,17 @@ graph TD
 
 #### Step-by-Step Pipeline
 
-1. **Assembly (metaFlye)**
-   - **External Tool:** `flye` (metaFlye mode)
-   - **Command Template:**
+1. **Assembly (myloasm default; metaFlye compatibility mode)**
+   - **External Tools:** `myloasm` by default; `flye` in metaFlye mode when `--assembler metaflye` is selected
+   - **Command Templates:**
      ```bash
+     myloasm <fastq> -o <output> -t <threads>
      flye <preset> <fastq> --out-dir <output> --threads <threads> --meta
      ```
-   - **Preset:** `--nano-raw` for CycloneSEQ/NanoPore (from `utils.py::preset_setting()`)
+   - **Preset:** `--preset` is silently ignored for `myloasm`; metaFlye uses `--nano-raw` for CycloneSEQ/NanoPore unless overridden
    - **Output Files:**
      - `<output>/assembly.fasta`: Assembled contigs
-     - `<output>/assembly_info.txt`: Contig metadata (length, coverage, circularity)
+     - `<output>/assembly_info.txt`: Contig metadata when emitted by the assembler; myloasm falls back to FASTA headers
    - **Checkpoint:** `<output>/_isDone` prevents re-run
 
 2. **Polishing (Optional, if `--polish` enabled)**
@@ -298,7 +299,7 @@ graph TD
 - fastp n_base_limit: 0 (no ambiguous bases allowed)
 
 **Assembly Info Parsing:**
-- `assembly_info.txt` format (Flye):
+- `assembly_info.txt` format (Flye-style table) or FASTA headers for assemblers without a separate info table:
   ```
   #seq_name  length  cov.  circ.
   contig_1   500000  50.5  Y
@@ -368,10 +369,13 @@ graph TD
    - **Preset:** Same as preprocessing (CycloneSEQ default)
    - **Output:** `<output>/aligned.bam`, `aligned.bam.bai`
 
-2. **SemiBin2 Binning**
-   - **External Tool:** `SemiBin2`
-   - **Command:**
+2. **Binning (LorBin default; SemiBin2 compatibility mode)**
+   - **External Tools:** `LorBin` by default; `SemiBin2` when `--binner semibin2` is selected
+   - **Command Templates:**
      ```bash
+     LorBin bin --fasta <assembly_fasta> --output <output> \
+       --num_process <threads> --bam <aligned.bam>
+
      SemiBin2 single_easy_bin \
        --random-seed 1005 \
        --sequencing-type=long_read \
@@ -383,10 +387,10 @@ graph TD
        --input-bam <aligned.bam> \
        --output <output>
      ```
-   - **Available Models (--environment):**
-     - `global` (default): General-purpose model
-     - `human_gut`, `dog_gut`, `ocean`, `soil`, `cat_gut`, `human_oral`, `mouse_gut`, `pig_gut`, `built_environment`, `wastewater`, `chicken_caecum`
-   - **Output:** `<output>/output_bins/*.fasta` (one file per bin)
+   - **Available SemiBin2 Models (--environment):**
+      - `global` (default): General-purpose model
+      - `human_gut`, `dog_gut`, `ocean`, `soil`, `cat_gut`, `human_oral`, `mouse_gut`, `pig_gut`, `built_environment`, `wastewater`, `chicken_caecum`
+   - **Output:** `<output>/output_bins/*.fa` (one file per bin; LorBin outputs are standardized here)
    - **Checkpoint:** `<output>/_isDone`
 
 3. **CheckM2 Bin Quality Assessment (Optional)**
@@ -400,9 +404,11 @@ graph TD
    - **Output:** `<output>/checkm2/quality_report.tsv`
 
 **Parameters:**
+- Default binner: `lorbin`
+- SemiBin2 compatibility mode: `--binner semibin2`
 - SemiBin2 random seed: 1005
 - Sequencing type: `long_read`
-- Compression: `none` (output bins as plain FASTA)
+- Compression: `none` for SemiBin2 (output bins as plain FASTA)
 
 ---
 
@@ -538,6 +544,7 @@ graph TD
 See `environment.yml` for full dependency list.
 
 **Key External Tools (installed via conda):**
+- `myloasm` ≥0.5 (default assembly)
 - `flye` ≥2.9 (metaFlye assembly)
 - `nextpolish` ≥1.4.1 (polishing)
 - `minimap2` ≥2.2 (alignment)
@@ -545,11 +552,14 @@ See `environment.yml` for full dependency list.
 - `chopper` (read filtering, Rust-based)
 - `fastp` (short-read QC)
 - `pigz` ≥2.8 (parallel gzip)
-- `SemiBin2` ≥2.2 (binning)
+- `LorBin` 0.1.0 (default binning; vendored in the Docker build)
+- `SemiBin2` ≥2.2 (compatibility binning)
 - `checkm2` (quality assessment)
 - `skani` ≥0.3 (taxonomic classification)
 - `sylph` ≥0.8.1 (abundance profiling)
 - `quast` ≥5.2.0 (optional, for metaQUAST evaluation)
+- `rosa` 1.1.0 (WDL read QC report generation; vendored wheel in Docker build)
+- `cycloneseq-report` (WDL final HTML report generation; installed from a BuildKit named context)
 
 **Python Libraries:**
 - `biopython`, `pandas`, `numpy`, `matplotlib`, `seaborn`, `plotly`
@@ -575,10 +585,15 @@ cycmetaasm --help
 
 ```bash
 # 1. Build Docker image (uses pre-compiled Nuitka binary)
-docker build -t cycmetaasm:1.0.0 .
+DOCKER_BUILDKIT=1 docker build \
+  --build-context cycloneseq_report_template=/data/gukaijie/project/00.review/cycloneseq-report-template \
+  -t cycmetaasm:v1.1.0 \
+  .
 
 # 2. Run container
-docker run --rm -v $(pwd)/data:/data cycmetaasm:1.0.0 --help
+docker run --rm -v $(pwd)/data:/data cycmetaasm:v1.1.0 cycmetaasm --help
+docker run --rm cycmetaasm:v1.1.0 rosa --help
+docker run --rm cycmetaasm:v1.1.0 cycloneseq-report -h
 ```
 
 **Option 3: Standalone Binary (Nuitka Compilation)**
@@ -622,16 +637,17 @@ python -m nuitka \
 
 **Random Seeds:**
 - Downsampling: `seed=1005` (hardcoded in `FastqDownsampler.__init__()`)
-- SemiBin2 binning: `--random-seed 1005` (hardcoded in binning command)
+- SemiBin2 binning compatibility mode: `--random-seed 1005` (hardcoded in binning command)
 
 **Version Pinning:**
-- Use `conda-linux-64.lock` for exact package versions (as in Dockerfile)
-- Lock file ensures bit-for-bit reproducibility across environments
+- Use `conda-linux-64.lock` for the main environment, `lorbin-conda-linux-64.lock` for LorBin, `rosa-bio-linux-64.lock` for Rosa, and the `cycloneseq-report` template lock from the named Docker build context
+- Lock files ensure reproducible package versions across environments
 
 **Tool Presets:**
 - Sequencing technology presets defined in `src/CycMetaAsm/utils.py::preset_setting()`
 - CycloneSEQ minimap2 preset: `-a -k 16 -w 13 -A 2 -B 4 -O 4,41 -E 2,1 -s 180 -U70,1000000 --eqx --secondary=no`
-- metaFlye preset: `--nano-raw` (for CycloneSEQ/NanoPore)
+- myloasm default: no assembler preset is used
+- metaFlye compatibility preset: `--nano-raw` (for CycloneSEQ/NanoPore)
 
 **Checkpoint System:**
 - All modules support checkpoint files (`_isDone`)
@@ -671,7 +687,7 @@ python -m nuitka \
 │   ├── host_removed.fastq.gz         # Host-depleted reads
 │   └── _isDone
 ├── assembly.fasta                    # Assembly contigs
-├── assembly_info.txt                 # Contig metadata (Flye)
+├── assembly_info.txt                 # Contig metadata or FASTA-header fallback
 ├── _isDone
 ├── polish/                           # If --polish enabled
 │   ├── short_reads_qc/
@@ -696,11 +712,11 @@ python -m nuitka \
 │   ├── aligned.bam                   # Read alignments
 │   ├── aligned.bam.bai
 │   ├── output_bins/
-│   │   └── *.fasta                   # Bins
+│   │   └── *.fa                      # Bins
 │   ├── checkm2/
 │   │   ├── quality_report.tsv
 │   │   └── _isDone
-│   ├── tmp/                          # SemiBin2 temp files
+│   ├── tmp/                          # Binner temp files, if produced
 │   └── _isDone
 ├── <classify_output>/
 │   ├── results_file.txt              # skani raw output
@@ -726,7 +742,7 @@ python -m nuitka \
 
 ### E.3 Key Output File Formats
 
-**`assembly_info.txt` (Flye):**
+**`assembly_info.txt` (Flye-style table; myloasm may use FASTA-header fallback):**
 ```
 #seq_name   length   cov.    circ.
 contig_1    1000000  45.2    Y
@@ -802,18 +818,18 @@ bin.1   High          92.5          2.1            5              3000000      1
 
 **No Explicit Scatter/Gather:**
 - Pipeline is sequential within a sample
-- Binning/classification naturally parallelized by external tools (SemiBin2, skani)
+- Binning/classification naturally parallelized by external tools (LorBin/SemiBin2, skani)
 
 ### F.2 Memory & Disk Considerations
 
 **Memory-Intensive Steps:**
-- Assembly (metaFlye): ~30-100GB RAM depending on dataset size
-- Binning (SemiBin2): ~10-30GB RAM
+- Assembly (myloasm or metaFlye): ~30-100GB RAM depending on dataset size
+- Binning (LorBin or SemiBin2): ~10-30GB RAM
 - CheckM2: ~10-20GB RAM (model loading + prediction)
 
 **Disk Space:**
-- Temporary files: Assembly graph (metaFlye), alignment BAMs, SemiBin2 tmp
-- Cleanup: SemiBin2 tmp directory can be deleted post-run (not automated)
+- Temporary files: assembler intermediates, alignment BAMs, binner temp files
+- Cleanup: binner temp directories can be deleted post-run when no longer needed
 - Checkpointing reduces redundant I/O
 
 **Streaming vs. Temp Files:**
@@ -835,6 +851,8 @@ bin.1   High          92.5          2.1            5              3000000      1
 **Dockerfile Optimizations:**
 - Micromamba base for fast conda environment
 - Pre-compiled Nuitka binary reduces startup time
+- Separate locked environments isolate CycMetaAsm, LorBin, Rosa, and the report generator dependency stacks
+- Docker builds require the `cycloneseq_report_template` BuildKit context for `cycloneseq-report`
 - Writable cache directories for matplotlib (`MPLCONFIGDIR=/tmp/matplotlib`)
 
 **No cgroup Limits Coded:**
@@ -850,8 +868,8 @@ bin.1   High          92.5          2.1            5              3000000      1
 |--------------------|--------------------------|
 | **Chapter 1: 目的 (Purpose)** | Section A.1.1 (Product Overview): Problem statement, integration/acceptance testing relevance (MAG quality validation, reproducibility) |
 | **Chapter 2: 范围 (Scope)** | Section A.1.1 (Target Users, Supported Data Types): In-scope = CycloneSEQ long reads, single-sample MAG recovery; Out-of-scope = multi-sample joint analysis, short-read-only mode |
-| **Chapter 3: 术语/缩略语 (Terms/Abbreviations)** | Throughout: MAG (Metagenome-Assembled Genome), scMAG (single-contig MAG), ANI (Average Nucleotide Identity), N50, GTDB (Genome Taxonomy Database), FASTQ/FASTA formats, CheckM2, SemiBin2, skani, sylph, metaFlye, NextPolish |
-| **Chapter 4: 参考资料 (References)** | Section D.1 (Dependencies), D.3 (Databases): Tool documentation (Flye, SemiBin2, CheckM2, skani, sylph), GTDB database, GRCh38 reference genome |
+| **Chapter 3: 术语/缩略语 (Terms/Abbreviations)** | Throughout: MAG (Metagenome-Assembled Genome), scMAG (single-contig MAG), ANI (Average Nucleotide Identity), N50, GTDB (Genome Taxonomy Database), FASTQ/FASTA formats, CheckM2, LorBin, SemiBin2, skani, sylph, myloasm, metaFlye, NextPolish |
+| **Chapter 4: 参考资料 (References)** | Section D.1 (Dependencies), D.3 (Databases): Tool documentation (myloasm, Flye, LorBin, SemiBin2, CheckM2, skani, sylph), GTDB database, GRCh38 reference genome |
 | **Chapter 5: 详细设计描述 (Detailed Design)** | Section B (Architecture & Module Decomposition): Module list table, CLI interface description, configuration (no external files), sequencing tech presets |
 | **Chapter 6: 算法设计描述 (Algorithm Design)** | Section C (Algorithm & Pipeline Details): Step-by-step pipelines, external tool commands with parameters, thresholds (length, quality, completeness, ANI), metric definitions (Quality_Score, ANI, abundance), example output tables |
 
@@ -861,24 +879,21 @@ bin.1   High          92.5          2.1            5              3000000      1
    - 项目编号, 文件编号, 文件密级, 评审/签名记录表 → **TBD**: Not inferable from code; requires organizational metadata
 
 2. **Integration Testing Details (Chapter 1):**
-   - Specific acceptance criteria, test datasets, validation procedures → **TBD**: No test suite found in repository; need test plan documentation
+   - Specific acceptance criteria and production validation datasets → **TBD**: focused regression checks are under `test/`, while existing historical scripts remain under `tests/`
 
 3. **Version History / 修订记录 (Chapter 0):**
    - Previous versions, change logs → **TBD**: Only version 0.1.0 in `pyproject.toml`; need formal revision tracking
 
 4. **Rosa Tool (Preprocessing QC):**
-   - Called in WDL but not in CLI → **TBD**: Confirm if Rosa is external or integrated; no code found in `src/CycMetaAsm/`
+   - Rosa is used by WDL-only QC tasks and installed in the production Docker image from the vendored release wheel
 
-5. **metaMDBG Assembler:**
-   - Listed in `cli.py` choices but no implementation in `assembly.py` → **TBD**: Confirm planned vs. implemented; code only handles metaFlye
-
-6. **Performance Benchmarks:**
+5. **Performance Benchmarks:**
    - Runtime, peak memory for reference datasets → **TBD**: Need empirical benchmark runs; not coded
 
-7. **Error Code Taxonomy:**
+6. **Error Code Taxonomy:**
    - Specific exit codes for different failure modes → **TBD**: Code raises generic exceptions; no custom error code system
 
-8. **kMetaShot Classification:**
+7. **kMetaShot Classification:**
    - Deprecated code in `classify.py` → **TBD**: Confirm removal or document as unsupported legacy
 
 ---
@@ -896,8 +911,10 @@ bin.1   High          92.5          2.1            5              3000000      1
 
 ### External Tool Documentation Links
 
+- **myloasm:** https://github.com/bluenote-1577/myloasm
 - **Flye (metaFlye):** https://github.com/fenderglass/Flye
 - **NextPolish:** https://github.com/Nextomics/NextPolish
+- **LorBin:** https://github.com/morgannprice/LorBin
 - **SemiBin2:** https://github.com/BigDataBiology/SemiBin
 - **CheckM2:** https://github.com/chklovski/CheckM2
 - **skani:** https://github.com/bluenote-1577/skani
@@ -959,8 +976,9 @@ cycmetaasm summarize output/binning/checkm2/quality_report.tsv output/summary/ \
 | `--min-length` | 1000 | Minimum read length (bp) |
 | `--min-quality` | 7 | Minimum read quality (Q-score) |
 | `--sequencing-tech` | CycloneSEQ | Preset: CycloneSEQ, HiFi, NanoPore |
-| `--assembler` | metaflye | Assembler: metaflye (only supported) |
-| `--binning-model` | global | SemiBin2 environment model |
+| `--assembler` | myloasm | Assembler: `myloasm` or `metaflye` |
+| `--binner` | lorbin | Binner: `lorbin` or `semibin2` |
+| `--binning-model` | global | SemiBin2 environment model; ignored by LorBin |
 | `--tool` (classify) | skani | Classification tool: skani |
 
 ### Contact & Support
@@ -969,6 +987,6 @@ For issues, questions, or contributions, please refer to the repository maintain
 
 ---
 
-**Document Version:** 1.0.0  
+**Document Version:** 1.1.0
 **Last Updated:** 2026-01-08  
 **Generated from Code Analysis of:** CycMetaAsm v0.1.0 (commit: latest on branch)

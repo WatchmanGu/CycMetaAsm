@@ -47,7 +47,9 @@ def process_files(
     ]
     # TODO: scmag_info maybe None if not assigned in arguments
     df_scmag_info = (
-        _parse_scMAGs_info(scmag_info) if scmag_info and Path(scmag_info).exists() else None
+        _parse_scMAGs_info(scmag_info)
+        if scmag_info and Path(scmag_info).exists()
+        else None
     )
     if df_scmag_info is not None:
         selected = pd.concat([selected, df_scmag_info], ignore_index=True)
@@ -120,14 +122,14 @@ def process_files(
     )
     lowquality_mag_list = merged[merged["Quality_rank"] == "Low"]["MAG_ID"].tolist()
     _LOGGER.info("%d MAGs are low quality", len(lowquality_mag_list))
-    
+
     # Check if we have any passed quality MAGs
     if len(passed_mag_list) == 0:
         _LOGGER.warning(
             "No high-quality or medium-quality MAGs detected. "
             "Abundance estimation will be skipped."
         )
-    
+
     if mag_path is not None:
         # Save MAG files by quality lists separately
         (Path(outdir) / "passed_quality_mags").mkdir(exist_ok=True)
@@ -275,7 +277,10 @@ def _plot_rank_completeness_contamination(df: pd.DataFrame, output: Path) -> Non
     if not required_cols.issubset(df.columns):
         _LOGGER.warning("Missing columns %s for rank plot, skipping", required_cols)
         return
-
+    # abcdefghijklmnopqrstuvwxyzXYZ0123456789
+    # 滚滚长江东逝水
+    # TODO
+    # ?? Handle the case where no non-low-quality MAGs are present
     df_non_low = df[df["Quality_rank"] != "Low"].copy()
     if df_non_low.empty:
         _LOGGER.warning("No non-low-quality MAGs available for rank plot")

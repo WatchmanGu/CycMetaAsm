@@ -13,7 +13,8 @@ workflow CycMetaAsmWorkflow {
     File input_fastq
     Int threads = 40
     String sequencing_tech = "CycloneSEQ"
-    String assembler = "metaflye"
+    String assembler = "myloasm"
+    String binner = "lorbin"
     File? checkm2_db_path
     File? skani_database
     Int min_length = 1000
@@ -68,6 +69,7 @@ workflow CycMetaAsmWorkflow {
       reads_fastq = preprocess_step.clean_fastq,
       threads = threads,
       assembler = assembler,
+      binner = binner,
       sequencing_tech = sequencing_tech,
       binning_mode = binning_mode,
       checkm2_db_path = checkm2_db_path

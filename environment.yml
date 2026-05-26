@@ -24,8 +24,8 @@ dependencies:
   - minimap2>=2.2
   - strainy
   - flye>=2.9
+  - myloasm >=0.5
   - nextpolish >=1.4.1
-  - metamdbg >=1.1
   - seqtk
   - seqkit
   - barrnap

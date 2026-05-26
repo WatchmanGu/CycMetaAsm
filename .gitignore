@@ -143,8 +143,15 @@ cython_debug/
 .DS_Store
 
 # Project specific
-tests/
-
+# tests/
+test*/
+!test/
+!test/assembler_binner_update/
+!test/assembler_binner_update/test_assembler_binner_update.py
+!test/pipeline_full/
+!test/pipeline_full/README.md
+!test/pipeline_full/run_full_pipeline_docker.sh
+!test/pipeline_full/test_full_pipeline_docker.py
 # Compressed files
 *.gz
 *.zip
@@ -152,6 +159,9 @@ tests/
 *.tar.gz
 *.tgz
 *.md5
+!vendor/
+!vendor/lorbin-0.1.0.tar.gz
+!vendor/rosa-1.1.0.wheel.tar.gz
 
 # Classification database
 database4classifier/

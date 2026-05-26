@@ -193,13 +193,12 @@ def clear_directory(path: Union[str, Path], *, keep_root: bool = True) -> None:
 def read_assembly_info(
     assembly_info: Union[str, Path],
 ) -> Mapping[str, Mapping[str, str]]:
-    """Parse assembly information from flye/metaMDBG output."""
+    """Parse assembly information from Flye-style tables or FASTA headers."""
     info: MutableMapping[str, MutableMapping[str, str]] = {}
     with myopen(assembly_info) as handle:
         first_line = handle.readline().strip()
         handle.seek(0)
         if first_line.startswith(">"):
-            # ? For metaMDBG assembly info
             for line in handle:
                 if not line.startswith(">"):
                     continue
@@ -227,23 +226,23 @@ def preset_setting(sequencing_technology: str) -> Mapping[str, str]:
     if tech == "nanopore":
         return {
             "minimap2": "-ax map-ont --eqx --secondary=no",
+            "myloasm": "",
             "metaflye": "--nano-raw",
-            "metamdbg": "--in-ont",
         }
     if tech == "hifi":
         return {
             "minimap2": "-ax map-hifi --eqx --secondary=no",
+            "myloasm": "",
             "metaflye": "--nano-raw",
-            "metamdbg": "--pacbio-hifi",
         }
     if tech == "cycloneseq":
         return {
             "minimap2": "-a -k 16 -w 13 -A 2 -B 4 -O 4,41 -E 2,1 -s 180 -U70,1000000 --eqx --secondary=no",
+            "myloasm": "",
             "metaflye": "--nano-raw",
-            "metamdbg": "--in-ont",
         }
     return {
         "minimap2": "-ax map-ont --eqx --secondary=no",
+        "myloasm": "",
         "metaflye": "--nano-raw",
-        "metamdbg": "--in-ont",
     }

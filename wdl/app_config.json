@@ -4,7 +4,7 @@
 	"tool_description_en": "Long-read metagenomic assembly and MAG analysis (CycloneSEQ)",
 	"tool_img_name": "logo.jpg",
 	"version_info": {
-		"tool_version": "V1.0.0.0",
+		"tool_version": "V1.1.0.0",
 		"tool_developer": "Gu Kaijie (gukaijie@genomics.cn)",
 		"tool_docker_package": "./combined_images.tar.gz",
 		"tool_zip_dependence": "./task.zip",
@@ -12,20 +12,20 @@
 		"tool_workflow_Desc": [
 			"测序数据质控：调用Rosa评估原始与清洗后测序数据的读长分布、GC含量和质量值分布等质量信息",
 			"测序数据预处理：根据设定的最小读长和最低质量阈值过滤低质量读段，可选对原始数据抽样和宿主基因组去除",
-			"宏基因组组装与抛光：调用metaFlye等组装工具构建宏基因组组装序列，可选额外使用短读段数据对组装结果进行抛光",
-			"分箱与基因组质量评估：调用Semibin2和CheckM2对组装结果进行分箱并评估MAG的完整度与污染度",
+			"宏基因组组装与抛光：默认调用myloasm构建宏基因组组装序列，可选额外使用短读段数据对组装结果进行抛光",
+			"分箱与基因组质量评估：默认调用LorBin和CheckM2对组装结果进行分箱并评估MAG的完整度与污染度",
 			"MAG物种注释与丰度评估：对MAG进行物种分类与丰度估计，并生成综合分析报告"
 		],
 		"tool_workflow_Desc_en": [
 			"Sequencing data QC: Use Rosa to evaluate read length distribution, GC content and base quality distribution for both raw and cleaned data",
 			"Read preprocessing: Filter low-quality reads according to minimum read length and minimum quality thresholds, with optional downsampling and host genome removal",
-			"Metagenome assembly and polishing: Use metaFlye and related tools to assemble metagenomes, with optional polishing using short-read data",
-			"Binning and genome quality assessment: Use Semibin2 and CheckM2 to bin contigs and assess MAG completeness and contamination",
+			"Metagenome assembly and polishing: Use myloasm by default to assemble metagenomes, with optional polishing using short-read data",
+			"Binning and genome quality assessment: Use LorBin by default and CheckM2 to bin contigs and assess MAG completeness and contamination",
 			"Taxonomic annotation and abundance estimation: Perform taxonomic classification and abundance estimation of MAGs and generate a comprehensive analysis report"
 		],
 		"tool_input_Desc": [
 			"样本ID：分析样本的编号或名称，作为结果文件的前缀",
-			"样本类型：分析样本的类型，用于选择合适的分析模式",
+			"样本类型：仅在选择SemiBin2分箱时用于选择合适的分析模式",
 			"测序数据文件：待分析测序数据文件（fastq/fq格式）",
             "宿主基因组序列文件：去除宿主序列所用的宿主基因组序列文件",
 			"抽样数据量：分析前随机抽取的总碱基数（bp）",
@@ -35,7 +35,7 @@
 		],
 		"tool_input_Desc_en": [
             "Sample ID (used for naming output files)",
-            "Sample type: used to select appropriate analysis mode",
+            "Sample type: used to select the SemiBin2 analysis mode only",
             "Sequencing data file to be analyzed (fastq/fq)",
             "Host genome sequence file for host read removal",
             "Downsampling bases: total bases (bp) to randomly retain before analysis",
@@ -70,8 +70,8 @@
                 "name_en": "Sample type",
                 "required": false,
                 "type": "String",
-                "desc": "选择样本类型，以便分析选择合适的模式（global类型用于非特定类型样本）",
-                "desc_en": "Select sample type to choose appropriate analysis mode (use 'global' for non-specific samples)",
+                "desc": "选择样本类型，仅在内部参数binner设置为semibin2时生效（global类型用于非特定类型样本）",
+                "desc_en": "Select sample type for SemiBin2 only; ignored by LorBin (use 'global' for non-specific samples)",
                 "visible": true,
                 "controlType": "select",
                 "options": [
@@ -242,7 +242,19 @@
 				"desc_en": "Internal parameter: assembler type, use default value",
 				"visible": false,
 				"controlType": "string",
-				"default": "metaflye"
+				"default": "myloasm"
+			},
+			{
+				"key": "CycMetaAsmWorkflow.binner",
+				"name": "binner",
+				"name_en": "binner",
+				"required": false,
+				"type": "String",
+				"desc": "内部参数：分箱软件类型，默认使用LorBin；旧流程可设置为semibin2",
+				"desc_en": "Internal parameter: binner type, defaults to LorBin; set to semibin2 for the previous workflow",
+				"visible": false,
+				"controlType": "string",
+				"default": "lorbin"
 			},
 			{
 				"key": "CycMetaAsmWorkflow.checkm2_db_path",
@@ -271,4 +283,3 @@
 		]
 	}
 }
-

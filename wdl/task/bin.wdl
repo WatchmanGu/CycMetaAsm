@@ -5,7 +5,8 @@ task bin_and_checkm2 {
     File raw_contigs
     File reads_fastq
     Int threads = 10
-    String assembler = "metaflye"
+    String assembler = "myloasm"
+    String binner = "lorbin"
     String sequencing_tech = "CycloneSEQ"
     String binning_mode = "global"
     File? checkm2_db_path
@@ -20,6 +21,7 @@ task bin_and_checkm2 {
 
     cycmetaasm bin ~{raw_contigs} ~{reads_fastq} work \
       --assembler ~{assembler} \
+      --binner ~{binner} \
       --threads ~{threads} \
       --sequencing-tech ~{sequencing_tech} \
       --binning-model ~{binning_mode} \
@@ -33,12 +35,12 @@ task bin_and_checkm2 {
   >>>
 
   output {
-    Array[File] bins = glob("work/output_bins/SemiBin_*.fa")
+    Array[File] bins = glob("work/output_bins/*.fa")
     File quality_report = "work/checkm2/quality_report.tsv"
   }
 
   runtime {
-    docker: "cycmetaasm:v1.0.0"
+    docker: "cycmetaasm:v1.1.0"
     cpu: threads + 2
     memory: "80G"
   }

@@ -6,7 +6,7 @@ task classify_bins {
     Array[File]? scMAGs
     File skani_database
     Int threads = 10
-    String assembler = "metaflye"
+    String assembler = "myloasm"
     String tool = "skani"
     Float ass2ref = 0.5
   }
@@ -37,7 +37,7 @@ task classify_bins {
   }
 
   runtime {
-    docker: "cycmetaasm:v1.0.0"
+    docker: "cycmetaasm:v1.1.0"
     cpu: threads + 2
     memory: "48G"
   }

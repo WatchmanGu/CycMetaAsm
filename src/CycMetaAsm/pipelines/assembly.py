@@ -1,6 +1,6 @@
 """
 Wrapped assembly pipeline including assembly and optional polishing.
-The raw assembly is performed using metaFlye (default) for long-read metagenomic data, followed by optional polishing
+The raw assembly is performed using myloasm (default) or metaFlye for long-read metagenomic data, followed by optional polishing
 using NextPolish with long reads and optional short reads.
 Raw assembly 'assembly.fasta' in the assembly directory, polishing results 'genome.nextpolish.fasta' in the 'polish' subdirectory.
 """
@@ -8,6 +8,7 @@ Raw assembly 'assembly.fasta' in the assembly directory, polishing results 'geno
 from __future__ import annotations
 
 import logging
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Tuple
@@ -31,6 +32,7 @@ class AssemblyConfig:
         polish_dir (Optional[str]): Directory where polishing results will be stored.
         short_reads1 (Optional[str]): Path to the paired short reads file (forward).
         short_reads2 (Optional[str]): Path to the paired short reads file (reverse).
+        myloasm_path (str): Executable name or path for myloasm.
         nextpolish_path (str): Executable name or path for NextPolish.
     """
 
@@ -43,6 +45,7 @@ class AssemblyConfig:
     polish: bool = False
     short_reads1: Optional[Path] = None
     short_reads2: Optional[Path] = None
+    myloasm_path: str = "myloasm"
     nextpolish_path: str = "nextPolish"
 
 
@@ -89,12 +92,45 @@ class AssemblyRunner:
             return self._assembly_output_paths()
 
         assembler = self.config.assembler.lower()
-        if assembler == "metaflye":
+        if assembler == "myloasm":
+            self._run_myloasm()
+        elif assembler == "metaflye":
             self._run_metaflye()
         else:
             raise ValueError(f"Unsupported assembler: {self.config.assembler}")
         mark_done(self.assembly_dir)
         return self._assembly_output_paths()
+
+    def _run_myloasm(self) -> None:
+        """Run myloasm and standardize its FASTA output name."""
+        cmd = [
+            self.config.myloasm_path,
+            str(self.config.fastq_path),
+            "-o",
+            str(self.assembly_dir),
+            "-t",
+            str(self.config.threads),
+        ]
+        _LOGGER.info("Running myloasm on %s", self.config.fastq_path)
+        run_cmd(cmd)
+        self._standardize_myloasm_output()
+
+    def _standardize_myloasm_output(self) -> Path:
+        target = self.assembly_dir / "assembly.fasta"
+        candidates = [
+            target,
+            self.assembly_dir / "assembly_primary.fa",
+        ]
+        for candidate in candidates:
+            if not candidate.exists():
+                continue
+            if candidate.resolve() != target.resolve():
+                shutil.copy2(candidate, target)
+            return target
+        raise FileNotFoundError(
+            "myloasm completed but no assembly FASTA was found. "
+            f"Checked: {', '.join(str(path) for path in candidates)}"
+        )
 
     def _run_metaflye(self) -> None:
         """
@@ -120,9 +156,10 @@ class AssemblyRunner:
                 self.assembly_dir / "assembly.fasta",
                 self.assembly_dir / "assembly_info.txt",
             )
-        else:
+        if assembler == "myloasm":
             fasta_path = self.assembly_dir / "assembly.fasta"
-        return fasta_path, fasta_path
+            return fasta_path, fasta_path
+        raise ValueError(f"Unsupported assembler: {self.config.assembler}")
 
     # ------------------------------------------------------------------
     # Polishing

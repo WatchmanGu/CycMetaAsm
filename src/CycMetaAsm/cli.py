@@ -26,6 +26,23 @@ from .utils import is_fastq_file, preset_setting, setup_logging
 
 _LOGGER = logging.getLogger(__name__)
 
+ASSEMBLER_CHOICES = ["myloasm", "metaflye"]
+BINNER_CHOICES = ["lorbin", "semibin2"]
+SEMIBIN2_MODELS = [
+    "human_gut",
+    "dog_gut",
+    "ocean",
+    "soil",
+    "cat_gut",
+    "human_oral",
+    "mouse_gut",
+    "pig_gut",
+    "built_environment",
+    "wastewater",
+    "chicken_caecum",
+    "global",
+]
+
 
 def parse_size(size_str: str) -> int:
     size_str = size_str.strip().upper()
@@ -77,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     assemble.add_argument("input", help="FASTQ input")
     assemble.add_argument("output", help="Output directory")
     assemble.add_argument(
-        "--assembler", choices=["metaflye", "metamdbg"], default="metaflye"
+        "--assembler", choices=ASSEMBLER_CHOICES, default="myloasm"
     )
     assemble.add_argument("--threads", type=int, default=10)
     assemble.add_argument("--preset", help="Assembler preset override")
@@ -111,7 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluation = subparsers.add_parser("evaluate", help="Run contig evaluation")
     evaluation.add_argument("assembly", help="Assembly FASTA")
     evaluation.add_argument("output", help="Output directory")
-    evaluation.add_argument("--assembler", default="metaflye")
+    evaluation.add_argument("--assembler", choices=ASSEMBLER_CHOICES, default="myloasm")
     evaluation.add_argument("--threads", type=int, default=10)
     evaluation.add_argument("--assembly-info")
     evaluation.add_argument("--checkm2", action="store_true")
@@ -123,29 +140,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--reference", required=False, help="Reference genomes for metaQUAST"
     )
 
-    binning = subparsers.add_parser("bin", help="Run SemiBin2 binning")
+    binning = subparsers.add_parser("bin", help="Run metagenomic binning")
     binning.add_argument("assembly", help="Assembly FASTA")
     binning.add_argument("reads", help="Reads FASTQ/FASTA")
     binning.add_argument("output", help="Output directory")
-    binning.add_argument("--assembler", default="metaflye")
+    binning.add_argument("--assembler", choices=ASSEMBLER_CHOICES, default="myloasm")
+    binning.add_argument(
+        "--binner",
+        choices=BINNER_CHOICES,
+        default="lorbin",
+        help="Binner to use (default: lorbin)",
+    )
     binning.add_argument("--threads", type=int, default=10)
     binning.add_argument(
         "--binning-model",
-        choices=[
-            "human_gut",
-            "dog_gut",
-            "ocean",
-            "soil",
-            "cat_gut",
-            "human_oral",
-            "mouse_gut",
-            "pig_gut",
-            "built_environment",
-            "wastewater",
-            "chicken_caecum",
-            "global",
-        ],
+        choices=SEMIBIN2_MODELS,
         default="global",
+        help="SemiBin2 environment model; ignored by LorBin",
     )
     binning.add_argument(
         "--sequencing-tech",
@@ -161,7 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
     classify.add_argument("output", help="Output directory")
     classify.add_argument("--database", help="The pre-generated ", required=True)
     classify.add_argument("--metadata", required=True)
-    classify.add_argument("--assembler", default="metaflye")
+    classify.add_argument("--assembler", choices=ASSEMBLER_CHOICES, default="myloasm")
     classify.add_argument("--threads", type=int, default=10)
     classify.add_argument("--tool", default="skani")
     classify.add_argument("--ass2ref", type=float, default=0.5)
@@ -197,38 +208,59 @@ def build_parser() -> argparse.ArgumentParser:
         default="CycloneSEQ",
         help="Sequencing technology preset",
     )
-    pipeline.add_argument("--assembler", default="metaflye", help="Assembler to use")
-    pipeline.add_argument("--downsample", type=parse_size, help="Target bases, e.g. 10G")
-    pipeline.add_argument("--min-length", type=int, default=1000, help="Minimum read length")
-    pipeline.add_argument("--min-quality", type=int, default=7, help="Minimum read quality")
+    pipeline.add_argument(
+        "--assembler",
+        choices=ASSEMBLER_CHOICES,
+        default="myloasm",
+        help="Assembler to use",
+    )
+    pipeline.add_argument(
+        "--binner",
+        choices=BINNER_CHOICES,
+        default="lorbin",
+        help="Binner to use",
+    )
+    pipeline.add_argument(
+        "--downsample", type=parse_size, help="Target bases, e.g. 10G"
+    )
+    pipeline.add_argument(
+        "--min-length", type=int, default=1000, help="Minimum read length"
+    )
+    pipeline.add_argument(
+        "--min-quality", type=int, default=7, help="Minimum read quality"
+    )
     pipeline.add_argument("--host-reference", help="Reference fasta for host removal")
     pipeline.add_argument("--polish", action="store_true", help="Enable polishing")
-    pipeline.add_argument("--short-reads1", help="Path to paired short reads file (forward)")
-    pipeline.add_argument("--short-reads2", help="Path to paired short reads file (reverse)")
-    pipeline.add_argument("--checkm2-db", required=True, help="CheckM2 database path (required)")
+    pipeline.add_argument(
+        "--short-reads1", help="Path to paired short reads file (forward)"
+    )
+    pipeline.add_argument(
+        "--short-reads2", help="Path to paired short reads file (reverse)"
+    )
+    pipeline.add_argument(
+        "--checkm2-db", required=True, help="CheckM2 database path (required)"
+    )
     pipeline.add_argument(
         "--binning-model",
-        choices=[
-            "human_gut",
-            "dog_gut",
-            "ocean",
-            "soil",
-            "cat_gut",
-            "human_oral",
-            "mouse_gut",
-            "pig_gut",
-            "built_environment",
-            "wastewater",
-            "chicken_caecum",
-            "global",
-        ],
+        choices=SEMIBIN2_MODELS,
         default="global",
-        help="SemiBin2 binning model",
+        help="SemiBin2 environment model; ignored by LorBin",
     )
-    pipeline.add_argument("--skani-database", help="Skani database path for classification")
-    pipeline.add_argument("--skani-metadata", help="Skani metadata TSV for classification")
-    pipeline.add_argument("--classify-tool", default="skani", help="Classification tool")
-    pipeline.add_argument("--classify-ass2ref", type=float, default=0.5, help="Assembly to reference ratio")
+    pipeline.add_argument(
+        "--skani-database", help="Skani database path for classification"
+    )
+    pipeline.add_argument(
+        "--skani-metadata", help="Skani metadata TSV for classification"
+    )
+    pipeline.add_argument(
+        "--classify-tool", default="skani", help="Classification tool"
+    )
+    pipeline.add_argument(
+        "--classify-ass2ref",
+        type=float,
+        default=0.5,
+        help="Assembly to reference ratio",
+    )
     pipeline.add_argument(
         "--keep-intermediate-files",
         action="store_true",
@@ -263,7 +295,9 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     if args.command == "assemble":
         if not is_fastq_file(args.input):
             parser.error("assemble expects a FASTQ input; use evaluate for FASTA")
-        preset = args.preset or preset_setting("CycloneSEQ")[args.assembler]
+        preset = None
+        if args.assembler != "myloasm":
+            preset = args.preset or preset_setting("CycloneSEQ")[args.assembler]
         if polish_path := args.polish_path:
             polish_path = Path(args.polish_path)
         else:
@@ -313,10 +347,9 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
                 mag_dir = subset_dir / "scMAGs"
                 mag_dir.mkdir(parents=True, exist_ok=True)
                 tobe_binned_assembly = subset_dir / "to_be_binned.fasta"
-                with (
-                    open(result.fasta_path) as asm_handle,
-                    open(tobe_binned_assembly, "w") as bin_handle,
-                ):
+                with open(result.fasta_path) as asm_handle, open(
+                    tobe_binned_assembly, "w"
+                ) as bin_handle:
                     for record in SeqIO.parse(asm_handle, "fasta"):
                         cid = record.description.split()[0]
                         if cid in high_quality_contigs:
@@ -366,7 +399,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         )
         output_dir.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame.from_dict(info, orient="index").to_csv(output_dir, sep="\t")
-        if args.metaquastq:
+        if args.metaquast:
             evaluation.run_metaquast()
         if args.checkm2:
             evaluation.run_checkm2()
@@ -379,6 +412,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
             reads_path=args.reads,
             output_dir=args.output,
             assembler=args.assembler,
+            binner=args.binner,
             threads=args.threads,
             minimap2_preset=presets["minimap2"],
             binning_mode=args.binning_model,
@@ -391,7 +425,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
                 EvaluationConfig(
                     assembly_fasta=result.bins_directory,
                     output_dir=args.output,
-                    assembler=f"{args.assembler}_bins",
+                    assembler=f"{args.assembler}_{args.binner}_bins",
                     threads=args.threads,
                     database_path=args.checkm2_db,
                 )
@@ -443,6 +477,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
             threads=args.threads,
             sequencing_technology=args.sequencing_tech,
             assembler=args.assembler,
+            binner=args.binner,
             downsample_bases=args.downsample,
             filter_min_length=args.min_length,
             filter_min_quality=args.min_quality,

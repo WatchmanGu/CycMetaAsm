@@ -4,13 +4,13 @@ task evaluate_assembly {
   input {
     File assembly_fasta
     Int threads = 10
-    String assembler = "metaflye"
+    String assembler = "myloasm"
     File? database_root
     String? reference_fasta
     File? assembly_info
   }
 
-  command <<<_
+  command <<<
     set -euo pipefail
 
     mkdir -p work
@@ -29,13 +29,14 @@ task evaluate_assembly {
     cycmetaasm evaluate ~{assembly_fasta} work $EVAL_ARGS
 
     cp work/evaluation/~{assembler}/assembly_contigs_info.tsv assembly_contigs_info.tsv
-  _>>>
+  >>>
 
   output {
     File assembly_contigs_info = "assembly_contigs_info.tsv"
   }
 
   runtime {
+    docker: "cycmetaasm:v1.1.0"
     cpu: threads
     memory: "8G"
   }

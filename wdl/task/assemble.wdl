@@ -4,7 +4,7 @@ task assemble_and_select {
   input {
     File clean_fastq
     Int threads = 10
-    String assembler = "metaflye"
+    String assembler = "myloasm"
     Boolean polish
     File? short_reads1
     File? short_reads2
@@ -67,7 +67,7 @@ task assemble_and_select {
   }
 
   runtime {
-    docker: "cycmetaasm:v1.0.0"
+    docker: "cycmetaasm:v1.1.0"
     cpu: threads + 2
     memory: "80G"
   }

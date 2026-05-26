@@ -29,7 +29,7 @@ class PipelineConfig:
     checkm2_db: str
     threads: int = 10
     sequencing_technology: str = "CycloneSEQ"
-    assembler: str = "metaflye"
+    assembler: str = "myloasm"
 
     # Preprocessing parameters
     downsample_bases: Optional[int] = None
@@ -43,6 +43,7 @@ class PipelineConfig:
     short_reads2: Optional[str] = None
 
     # Binning parameters
+    binner: str = "lorbin"
     binning_mode: str = "global"
 
     # Classification parameters
@@ -63,6 +64,13 @@ def run_pipeline(config: PipelineConfig) -> None:
     """
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    assembler = config.assembler.lower()
+    binner = config.binner.lower()
+    if assembler not in {"myloasm", "metaflye"}:
+        raise ValueError(f"Unsupported assembler: {config.assembler}")
+    if binner not in {"lorbin", "semibin2"}:
+        raise ValueError(f"Unsupported binner: {config.binner}")
 
     presets = preset_setting(config.sequencing_technology)
 
@@ -99,13 +107,13 @@ def run_pipeline(config: PipelineConfig) -> None:
     _LOGGER.info("=" * 60)
 
     assembly_dir = output_dir / "assembly"
-    preset = presets.get(config.assembler, presets["metaflye"])
+    preset = None if assembler == "myloasm" else presets[assembler]
     polish_dir = assembly_dir / "polish" if config.polish else None
 
     assembly_config = AssemblyConfig(
         fastq_path=Path(clean_fastq),
         output_dir=assembly_dir,
-        assembler=config.assembler,
+        assembler=assembler,
         threads=config.threads,
         preset=preset,
         polish=config.polish,
@@ -131,7 +139,7 @@ def run_pipeline(config: PipelineConfig) -> None:
             EvaluationConfig(
                 assembly_fasta=assembly_result.fasta_path,
                 output_dir=str(subset_dir),
-                assembler=config.assembler,
+                assembler=assembler,
                 threads=config.threads,
                 database_path=config.checkm2_db,
             )
@@ -158,10 +166,9 @@ def run_pipeline(config: PipelineConfig) -> None:
             scmags_dir.mkdir(parents=True, exist_ok=True)
             to_be_binned = subset_dir / "to_be_binned.fasta"
 
-            with (
-                open(assembly_result.fasta_path) as asm_handle,
-                open(to_be_binned, "w") as bin_handle,
-            ):
+            with open(assembly_result.fasta_path) as asm_handle, open(
+                to_be_binned, "w"
+            ) as bin_handle:
                 for record in SeqIO.parse(asm_handle, "fasta"):
                     cid = record.description.split()[0]
                     if cid in high_quality_contigs:
@@ -197,7 +204,8 @@ def run_pipeline(config: PipelineConfig) -> None:
         assembly_fasta=str(to_be_binned),
         reads_path=clean_fastq,
         output_dir=str(binning_dir),
-        assembler=config.assembler,
+        assembler=assembler,
+        binner=binner,
         threads=config.threads,
         minimap2_preset=presets["minimap2"],
         binning_mode=config.binning_mode,
@@ -215,7 +223,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         EvaluationConfig(
             assembly_fasta=binning_result.bins_directory,
             output_dir=str(binning_dir),
-            assembler=f"{config.assembler}_bins",
+            assembler=f"{assembler}_{binner}_bins",
             threads=config.threads,
             database_path=config.checkm2_db,
         )
@@ -254,7 +262,7 @@ def run_pipeline(config: PipelineConfig) -> None:
                 database=config.skani_database,
                 metadata=config.skani_metadata,
                 threads=config.threads,
-                assembler=config.assembler,
+                assembler=assembler,
                 output_dir=str(classify_dir),
                 tool=config.classify_tool,
                 ass2ref=config.classify_ass2ref,

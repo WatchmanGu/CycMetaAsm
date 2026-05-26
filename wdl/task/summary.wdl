@@ -47,7 +47,7 @@ task summarize_results {
   }
 
   runtime {
-    docker: "cycmetaasm:v1.0.0"
+    docker: "cycmetaasm:v1.1.0"
     cpu: threads + 2
     memory: "48G"
   }
@@ -97,7 +97,7 @@ task make_report {
   }
 
   runtime {
-    docker: "cycloneseq-report:v1.4.0"
+    docker: "cycmetaasm:v1.1.0"
     cpu: threads
     memory: "16G"
   }
