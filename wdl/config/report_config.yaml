@@ -24,8 +24,8 @@ body:
       type: "block"
       style: "default"
       description_1:
-        zh: "使用Rosa v0.2.14.0<sup>[1]</sup>对原始测序数据的质量信息进行统计，统计结果如下表所示。"
-        en: "Use Rosa v0.2.14.0<sup>[1]</sup> to summarize the quality metrics of raw sequencing data. The results are presented in the table below."
+        zh: "使用Rosa v1.1.0.0<sup>[1]</sup>对原始测序数据的质量信息进行统计，统计结果如下表所示。"
+        en: "Use Rosa v1.1.0.0<sup>[1]</sup> to summarize the quality metrics of raw sequencing data. The results are presented in the table below."
       contents:
         content_1:
           type: "list"
@@ -121,8 +121,8 @@ body:
       type: "block"
       style: "default"
       description_1:
-        zh: "使用Rosa v0.2.14.0<sup>[1]</sup>对清洗后测序数据的质量信息进行统计，统计结果如下表所示。"
-        en: "Use Rosa v0.2.14.0<sup>[1]</sup> to summarize the quality metrics of cleaned sequencing data. The results are presented in the table below."
+        zh: "使用Rosa v1.1.0.0<sup>[1]</sup>对清洗后测序数据的质量信息进行统计，统计结果如下表所示。"
+        en: "Use Rosa v1.1.0.0<sup>[1]</sup> to summarize the quality metrics of cleaned sequencing data. The results are presented in the table below."
       contents:
         content_1:
           type: "list"

@@ -1,0 +1,128 @@
+{
+  "workflowName": "CycMetaAsmWorkflow",
+  "workflowProcessingEvents": [
+    {
+      "cromwellId": "cromid-6746db4",
+      "description": "PickedUp",
+      "timestamp": "2026-05-30T07:33:27.658Z",
+      "cromwellVersion": "87"
+    }
+  ],
+  "actualWorkflowLanguageVersion": "1.0",
+  "submittedFiles": {
+    "workflow": "version 1.0\n\n# Standalone DCS workflow generated from wdl/workflow.wdl and imported task WDLs.\n# DCS accepts a single WDL file, so all called tasks are defined in this file.\n\ntask preprocess {\n  input {\n    File input_fastq\n    Int threads = 10\n    String sequencing_tech = \"CycloneSEQ\"\n    Int min_length = 1000\n    Int min_quality = 7\n    File? host_reference\n    Float? downsample\n  }\n\n  command <<<\n    set -euo pipefail\n\n    mkdir -p work\n\n    #\n    # Handle downsample logic in bash\n    #\n    DS_FLAG=\"\"\n    if [[ ~{defined(downsample)} == \"true\" ]]; then\n        ds=\"~{downsample}\"\n\n        # Case 1: Value < 0.1: only warn, do not apply downsampling\n        awk_res=$(awk -v v=\"$ds\" 'BEGIN {if (v < 0.1) print \"lt\"; else print \"ge\"}')\n        if [[ \"$awk_res\" == \"lt\" ]]; then\n            echo \"[WARNING] The sampled data volume is too small; assembly may fail!\" >&2\n            # Do NOT enable downsampling\n        else\n            # Case 2: Value == 0: disable downsampling\n            if awk -v v=\"$ds\" 'BEGIN {exit !(v == 0)}'; then\n                echo \"[INFO] Downsample value is 0; downsampling disabled.\"\n            else\n                # Case 3: Normal downsampling\n                DS_FLAG=\"${ds}G\"\n            fi\n        fi\n    fi\n    if [[ -n \"$DS_FLAG\" ]]; then\n        echo \"[INFO] Downsampling enabled: target data volume = $DS_FLAG\"\n        cycmetaasm preprocess ~{input_fastq} work \\\n        --threads ~{threads} \\\n        --sequencing-tech ~{sequencing_tech} \\\n        --min-length ~{min_length} \\\n        --min-quality ~{min_quality} \\\n        ~{if defined(host_reference) then \"--host-reference \" + host_reference else \"\"} \\\n        --downsample \"${DS_FLAG}\"\n    else\n        echo \"[INFO] Downsampling disabled.\"\n        cycmetaasm preprocess ~{input_fastq} work \\\n        --threads ~{threads} \\\n        --sequencing-tech ~{sequencing_tech} \\\n        --min-length ~{min_length} \\\n        --min-quality ~{min_quality} \\\n        ~{if defined(host_reference) then \"--host-reference \" + host_reference else \"\"}\n    fi\n\n    cp ~{if defined(host_reference) then \"work/remove_host/host_removed.fastq.gz\" else \"work/qc/filtered.fastq.gz\"} clean.fastq.gz\n  >>>\n\n  output {\n    File clean_fastq = \"clean.fastq.gz\"\n  }\n\n  runtime {\n    docker: \"cycmetaasm:v1.1.0\"\n    cpu: threads + 2\n    memory: \"80G\"\n  }\n}\n\ntask RunRosa{\n    input {\n        File fastq_file\n        String sample_id\n    }\n\n    command <<<\n        set -euo pipefail\n        echo \"Running Rosa for quality control...\"\n        rosa \\\n            -i ~{fastq_file} \\\n            --sample-name ~{sample_id} \\\n            --seed 9999 \\\n            --sample-size 100000 \\\n            -o result \\\n            -t 4\n\n        if [ ! -f result/report.html ]; then\n            echo \"Rosa report not found!\"\n            exit 1\n        fi\n        mv result/report.html result/~{sample_id}_QC_report.html\n        zip -r ~{sample_id}_QC_results.zip result/\n        echo \"Rosa QC completed.\"\n    >>>\n\n    output {\n        File rosa_results_zip = \"~{sample_id}_QC_results.zip\"\n        Array[File] rosa_results = [\n            \"result/fastx_analyses/figures/read_length_distribution.png\",\n            \"result/fastx_analyses/figures/read_quality_distribution.png\",\n            \"result/fastx_analyses/figures/cumulative_read_length.png\",\n            \"result/fastx_analyses/figures/read_length_vs_quality.png\",\n            \"result/fastx_analyses/results/reference-free_QC_results_summary.tsv\"\n        ]\n    }\n\n    runtime {\n        docker: \"cycmetaasm:v1.1.0\"\n        cpu: 10\n        memory: 32 + \"GB\"\n    }\n}\n\ntask assemble_and_select {\n  input {\n    File clean_fastq\n    Int threads = 10\n    String assembler = \"myloasm\"\n    Boolean polish\n    File? short_reads1\n    File? short_reads2\n    File? checkm2_db_path\n  }\n\n  command <<<\n    set -euo pipefail\n\n    mkdir -p work\n    # Workaround for Python multiprocessing, fixes \"AF_UNIX path too long\"\n    mkdir -p /tmp\n    export TMPDIR=\"/tmp\"\n\n    cycmetaasm assemble ~{clean_fastq} work \\\n      --assembler ~{assembler} \\\n      --threads ~{threads} \\\n      ~{if polish then \"--polish\" else \"\"} \\\n      ~{if defined(short_reads1) then \"--short-reads1\" else \"\"} ~{short_reads1} \\\n      ~{if defined(short_reads2) then \"--short-reads2\" else \"\"} ~{short_reads2} \\\n      ~{if defined(checkm2_db_path) then \"--checkm2-db \" + checkm2_db_path else \"\"}\n\n    # Copy the final assembly (polished or raw)\n    cp -L ~{if polish then \"work/polish/genome.nextpolish.fasta\" else \"work/assembly.fasta\"} assembly.fasta\n\n    # Handle output paths based on whether CheckM2 db was provided\n    if [[ ~{defined(checkm2_db_path)} == \"true\" ]]; then\n      # CheckM2 processing creates subset_contigs directory\n      if [ -f work/subset_contigs/to_be_binned.fasta ]; then\n        cp -L work/subset_contigs/to_be_binned.fasta to_be_binned.fasta\n      else\n        # Fallback if directory structure is different\n        cp -L assembly.fasta to_be_binned.fasta\n      fi\n      # Create scMAGs directory link or copy\n      if [ -d work/subset_contigs/scMAGs ]; then\n        cp -rL work/subset_contigs/scMAGs work/scMAGs_output\n      else\n        mkdir -p work/scMAGs_output\n      fi\n      # Ensure scMAGs_info.tsv exists\n      if [ ! -f work/subset_contigs/scMAGs/scMAGs_info.tsv ] && [ ! -f work/scMAGs_output/scMAGs_info.tsv ]; then\n        echo -e \"Contig\\tLength\\tCompleteness\\tContamination\" > work/scMAGs_output/scMAGs_info.tsv\n      elif [ -f work/subset_contigs/scMAGs/scMAGs_info.tsv ]; then\n        cp work/subset_contigs/scMAGs/scMAGs_info.tsv work/scMAGs_output/scMAGs_info.tsv\n      fi\n    else\n      # No CheckM2 db provided - all contigs go to binning\n      cp -L assembly.fasta to_be_binned.fasta\n      mkdir -p work/scMAGs_output\n      echo -e \"Contig\\tLength\\tCompleteness\\tContamination\" > work/scMAGs_output/scMAGs_info.tsv\n    fi\n  >>>\n\n  output {\n    File assembly_fasta = \"assembly.fasta\"\n    File tobe_binned_fasta = \"to_be_binned.fasta\"\n    Array[File] scMAGs = glob(\"work/scMAGs_output/*.fa\")\n    File scMAGs_info = \"work/scMAGs_output/scMAGs_info.tsv\"\n  }\n\n  runtime {\n    docker: \"cycmetaasm:v1.1.0\"\n    cpu: threads + 2\n    memory: \"80G\"\n  }\n}\n\ntask bin_and_checkm2 {\n  input {\n    File raw_contigs\n    File reads_fastq\n    Int threads = 10\n    String assembler = \"myloasm\"\n    String binner = \"lorbin\"\n    String sequencing_tech = \"CycloneSEQ\"\n    String binning_mode = \"global\"\n    File? checkm2_db_path\n  }\n\n  command <<<\n    set -euo pipefail\n\n    mkdir -p work\n    mkdir -p /tmp\n    export TMPDIR=\"/tmp\"\n\n    cycmetaasm bin ~{raw_contigs} ~{reads_fastq} work \\\n      --assembler ~{assembler} \\\n      --binner ~{binner} \\\n      --threads ~{threads} \\\n      --sequencing-tech ~{sequencing_tech} \\\n      --binning-model ~{binning_mode} \\\n      ~{if defined(checkm2_db_path) then \"--checkm2-db \" + checkm2_db_path else \"\"}\n\n    # If checkm2_db_path is not provided, create an empty quality report\n    if [[ ~{defined(checkm2_db_path)} == \"false\" ]]; then\n      mkdir -p work/checkm2\n      echo -e \"Name\\tCompleteness\\tContamination\\tContig_N50\\tTotal_Contigs\\tGenome_Size\" > work/checkm2/quality_report.tsv\n    fi\n  >>>\n\n  output {\n    Array[File] bins = glob(\"work/output_bins/*.fa\")\n    File quality_report = \"work/checkm2/quality_report.tsv\"\n  }\n\n  runtime {\n    docker: \"cycmetaasm:v1.1.0\"\n    cpu: threads + 2\n    memory: \"80G\"\n  }\n}\n\ntask classify_bins {\n  input {\n    Array[File] bins\n    Array[File]? scMAGs\n    File skani_database\n    Int threads = 10\n    String assembler = \"myloasm\"\n    String tool = \"skani\"\n    Float ass2ref = 0.5\n  }\n\n  command <<<\n    set -euo pipefail\n\n    mkdir -p work/all_bins\n\n    # Link bins\n    for f in ~{sep=' ' bins}; do ln -s \"$f\" work/all_bins/; done\n    # Link scMAGs if provided\n    if [[ ~{length(select_first([scMAGs, []]))} -gt 0 ]]; then\n      for f in ~{sep=' ' select_first([scMAGs, []])}; do ln -s \"$f\" work/all_bins/; done\n    fi\n\n    cycmetaasm classify work/all_bins work \\\n      --assembler ~{assembler} \\\n      --threads ~{threads} \\\n      --database ~{skani_database} \\\n      --metadata ~{skani_database}/metadata.tsv \\\n      --tool ~{tool} \\\n      --ass2ref ~{ass2ref}\n  >>>\n\n  output {\n    File classify_result = \"work/classify_result_deduplicated.tsv\"\n  }\n\n  runtime {\n    docker: \"cycmetaasm:v1.1.0\"\n    cpu: threads + 2\n    memory: \"48G\"\n  }\n}\n\ntask summarize_results {\n  input {\n    Array[File]? scMAGs\n    File? scMAGs_info\n    Array[File] bins\n    File bins_quality_report\n    File? classification_tsv\n    File? fastq\n    Int threads = 10\n  }\n\n  # Turn optional Array[File]? into a concrete Array[File] (possibly empty)\n  Array[File] scmags_list = select_first([scMAGs, []])\n\n  command <<<\n    set -euo pipefail\n\n    mkdir -p all_mags\n    # Only copy scMAGs if we actually have any\n    if [[ ~{length(scmags_list)} -gt 0 ]]; then\n      cp -L ~{sep=' ' scmags_list} all_mags/\n    fi\n\n    cp -L ~{sep=' ' bins} all_mags/\n    mkdir -p summary\n    touch summary/taxonomic_abundance.html summary/rank_completeness_contamination.png summary/contig_n50_violin.png\n    cycmetaasm summarize ~{bins_quality_report} \\\n      summary \\\n      ~{if defined(classification_tsv) then \"--classification \" + classification_tsv else \"\"} \\\n      --mag-path all_mags \\\n      ~{if defined(scMAGs_info) then \"--scmag-info \" + scMAGs_info else \"\"} \\\n      ~{if defined(fastq) then \"--fastq-file \" + fastq else \"\"} \\\n      --threads ~{threads}\n  >>>\n\n  output {\n    File summary_tsv = \"summary/summary.tsv\"\n    File top_summary_tsv = \"summary/top_ranked_mag_summary.tsv\"\n    File passed_mags = \"summary/passed_quality_mags\"\n    File low_quality_mags = \"summary/low_quality_mags\"\n    File mag_quality_table = \"summary/quality_stats.tsv\"\n    File taxonomic_abundance_html = \"summary/taxonomic_abundance.html\"\n    File quality_rank_img = \"summary/rank_completeness_contamination.png\"\n    File contig_n50_img = \"summary/contig_n50_violin.png\"\n  }\n\n  runtime {\n    docker: \"cycmetaasm:v1.1.0\"\n    cpu: threads + 2\n    memory: \"48G\"\n  }\n}\n\ntask make_report {\n  input {\n    String sample_id\n    File raw_rosa_results_zip\n    File clean_rosa_results_zip\n    Array[File] raw_rosa_results\n    Array[File] clean_rosa_results\n    File summary_tsv\n    File top_summary_tsv\n    File passed_mags\n    File low_quality_mags\n    File mag_quality_table\n    File taxonomic_abundance_html\n    File quality_rank_img\n    File contig_n50_img\n    File report_config\n    Int threads\n  }\n\n  command <<<\n    set -euo pipefail\n    echo \"Generating final report...\"\n    mkdir -p results/raw_rosa_results results/clean_rosa_results\n    cp ~{sep=' ' raw_rosa_results} results/raw_rosa_results/\n    cp ~{sep=' ' clean_rosa_results} results/clean_rosa_results/\n    cp -r ~{raw_rosa_results_zip} ~{clean_rosa_results_zip} ~{summary_tsv} ~{top_summary_tsv} ~{passed_mags} ~{low_quality_mags} ~{mag_quality_table} ~{taxonomic_abundance_html} ~{quality_rank_img} ~{contig_n50_img} results/\n    cycloneseq-report ~{report_config} \\\n        -o results/~{sample_id}_CycMetaAsm_Report.html \\\n        -w results/\n    echo \"Final report generated.\"\n    rm -r results/clean_rosa_results/ results/raw_rosa_results/\n    mv results ~{sample_id}_CycMetaAsm_Results\n    zip -r ~{sample_id}_CycMetaAsm_Results.zip ~{sample_id}_CycMetaAsm_Results/\n    echo \"Results zipped.\"\n    paste -d \"\\t\" <(echo -e \"Sample_id\\n~{sample_id}\") ~{mag_quality_table} > summary.txt\n  >>>\n\n  output {\n    File report_html = \"~{sample_id}_CycMetaAsm_Results/~{sample_id}_CycMetaAsm_Report.html\"\n    File results_zip = \"~{sample_id}_CycMetaAsm_Results.zip\"\n    File job_summary = \"summary.txt\"\n  }\n\n  runtime {\n    docker: \"cycmetaasm:v1.1.0\"\n    cpu: threads\n    memory: \"16G\"\n  }\n}\n\nworkflow CycMetaAsmWorkflow {\n  input {\n    File report_config_yaml\n    String sample_id\n    File input_fastq\n    Int threads = 40\n    String sequencing_tech = \"CycloneSEQ\"\n    String assembler = \"myloasm\"\n    String binner = \"lorbin\"\n    File? checkm2_db_path\n    File? skani_database\n    Int min_length = 1000\n    Int min_quality = 7\n    Boolean polish = false\n    File? short_reads1\n    File? short_reads2\n    File? host_reference\n    Float? downsample\n    String binning_mode = \"global\"\n    String classify_tool = \"skani\"\n    Float classify_ass2ref = 0.5\n  }\n\n  call RunRosa as raw_rosa_step {\n    input:\n      fastq_file = input_fastq,\n      sample_id = \"raw\"\n  }\n\n  call preprocess as preprocess_step {\n    input:\n      input_fastq = input_fastq,\n      threads = threads,\n      sequencing_tech = sequencing_tech,\n      min_length = min_length,\n      min_quality = min_quality,\n      host_reference = host_reference,\n      downsample = downsample\n  }\n\n  call RunRosa as clean_rosa_step {\n    input:\n      fastq_file = preprocess_step.clean_fastq,\n      sample_id = \"clean\"\n  }\n\n  call assemble_and_select as assemble_step {\n    input:\n      clean_fastq = preprocess_step.clean_fastq,\n      threads = threads,\n      assembler = assembler,\n      polish = polish,\n      short_reads1 = short_reads1,\n      short_reads2 = short_reads2,\n      checkm2_db_path = checkm2_db_path\n  }\n\n  call bin_and_checkm2 as bin_step {\n    input:\n      raw_contigs = assemble_step.tobe_binned_fasta,\n      reads_fastq = preprocess_step.clean_fastq,\n      threads = threads,\n      assembler = assembler,\n      binner = binner,\n      sequencing_tech = sequencing_tech,\n      binning_mode = binning_mode,\n      checkm2_db_path = checkm2_db_path\n  }\n\n  # Optional classification: only run if skani_database is provided\n  if (defined(skani_database)) {\n    call classify_bins as classify_step {\n      input:\n        bins = bin_step.bins,\n        scMAGs = assemble_step.scMAGs,\n        skani_database = select_first([skani_database]),\n        threads = threads,\n        assembler = assembler,\n        tool = classify_tool,\n        ass2ref = classify_ass2ref\n    }\n  }\n\n  # Always summarize results; use separate aliases\n  call summarize_results as summary_step {\n    input:\n      scMAGs = assemble_step.scMAGs,\n      scMAGs_info = assemble_step.scMAGs_info,\n      bins = bin_step.bins,\n      bins_quality_report = bin_step.quality_report,\n      classification_tsv = classify_step.classify_result,\n      fastq = preprocess_step.clean_fastq,\n      threads = threads\n  }\n\n  # Make a report, taxonomic information optional\n  call make_report as report_step {\n    input:\n      sample_id = sample_id,\n      raw_rosa_results_zip = raw_rosa_step.rosa_results_zip,\n      clean_rosa_results_zip = clean_rosa_step.rosa_results_zip,\n      raw_rosa_results = raw_rosa_step.rosa_results,\n      clean_rosa_results = clean_rosa_step.rosa_results,\n      summary_tsv = summary_step.summary_tsv,\n      top_summary_tsv = summary_step.top_summary_tsv,\n      passed_mags = summary_step.passed_mags,\n      low_quality_mags = summary_step.low_quality_mags,\n      mag_quality_table = summary_step.mag_quality_table,\n      taxonomic_abundance_html = summary_step.taxonomic_abundance_html,\n      quality_rank_img = summary_step.quality_rank_img,\n      contig_n50_img = summary_step.contig_n50_img,\n      report_config = report_config_yaml,\n      threads = 4\n  }\n\n  output {\n    File report_html = report_step.report_html\n    File report_zip = report_step.results_zip\n    File job_summary = report_step.job_summary\n  }\n}\n",
+    "root": "",
+    "options": "{\n\n}",
+    "inputs": "{\"CycMetaAsmWorkflow.assembler\":\"myloasm\",\"CycMetaAsmWorkflow.binner\":\"lorbin\",\"CycMetaAsmWorkflow.binning_mode\":\"global\",\"CycMetaAsmWorkflow.checkm2_db_path\":\"/data/cromwell_workdir/CycMetaAsm_V1.1.0.0/database/CheckM2/uniref100.KO.1.dmnd\",\"CycMetaAsmWorkflow.classify_ass2ref\":0.5,\"CycMetaAsmWorkflow.classify_tool\":\"skani\",\"CycMetaAsmWorkflow.downsample\":0.0,\"CycMetaAsmWorkflow.host_reference\":\"/data/cromwell_workdir/CycMetaAsm_V1.1.0.0/database/GRCh38.p14.fa\",\"CycMetaAsmWorkflow.input_fastq\":\"/data/gukaijie/project/02.metagenomic/workflow/CycMetaAsm/wdl/test/sample.fastq.gz\",\"CycMetaAsmWorkflow.min_length\":1000,\"CycMetaAsmWorkflow.min_quality\":7,\"CycMetaAsmWorkflow.polish\":false,\"CycMetaAsmWorkflow.report_config_yaml\":\"/data/gukaijie/project/02.metagenomic/workflow/CycMetaAsm/wdl/config/report_config.yaml\",\"CycMetaAsmWorkflow.sample_id\":\"dcs_smoke_sample\",\"CycMetaAsmWorkflow.sequencing_tech\":\"CycloneSEQ\",\"CycMetaAsmWorkflow.skani_database\":\"/data/CycloneFlow_APPs/APPs/database4classifier\",\"CycMetaAsmWorkflow.threads\":8}",
+    "workflowUrl": "",
+    "labels": "{}"
+  },
+  "calls": {
+    "CycMetaAsmWorkflow.preprocess_step": [
+      {
+        "executionStatus": "Running",
+        "stdout": "/data/cromwell_workdir/cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-preprocess_step/execution/stdout",
+        "backendStatus": "Running",
+        "commandLine": "set -euo pipefail\n\nmkdir -p work\n\n#\n# Handle downsample logic in bash\n#\nDS_FLAG=\"\"\nif [[ true == \"true\" ]]; then\n    ds=\"0.0\"\n\n    # Case 1: Value < 0.1: only warn, do not apply downsampling\n    awk_res=$(awk -v v=\"$ds\" 'BEGIN {if (v < 0.1) print \"lt\"; else print \"ge\"}')\n    if [[ \"$awk_res\" == \"lt\" ]]; then\n        echo \"[WARNING] The sampled data volume is too small; assembly may fail!\" >&2\n        # Do NOT enable downsampling\n    else\n        # Case 2: Value == 0: disable downsampling\n        if awk -v v=\"$ds\" 'BEGIN {exit !(v == 0)}'; then\n            echo \"[INFO] Downsample value is 0; downsampling disabled.\"\n        else\n            # Case 3: Normal downsampling\n            DS_FLAG=\"${ds}G\"\n        fi\n    fi\nfi\nif [[ -n \"$DS_FLAG\" ]]; then\n    echo \"[INFO] Downsampling enabled: target data volume = $DS_FLAG\"\n    cycmetaasm preprocess /cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-preprocess_step/inputs/885952258/sample.fastq.gz work \\\n    --threads 8 \\\n    --sequencing-tech CycloneSEQ \\\n    --min-length 1000 \\\n    --min-quality 7 \\\n    --host-reference /cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-preprocess_step/inputs/195590771/GRCh38.p14.fa \\\n    --downsample \"${DS_FLAG}\"\nelse\n    echo \"[INFO] Downsampling disabled.\"\n    cycmetaasm preprocess /cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-preprocess_step/inputs/885952258/sample.fastq.gz work \\\n    --threads 8 \\\n    --sequencing-tech CycloneSEQ \\\n    --min-length 1000 \\\n    --min-quality 7 \\\n    --host-reference /cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-preprocess_step/inputs/195590771/GRCh38.p14.fa\nfi\n\ncp work/remove_host/host_removed.fastq.gz clean.fastq.gz",
+        "shardIndex": -1,
+        "runtimeAttributes": {
+          "runtime_minutes": "1800",
+          "queue": "compute",
+          "failOnStderr": "false",
+          "continueOnReturnCode": "0",
+          "docker": "cycmetaasm:v1.1.0",
+          "maxRetries": "0",
+          "cpu": "10",
+          "memory": "80 GB"
+        },
+        "callCaching": {
+          "allowResultReuse": false,
+          "effectiveCallCachingMode": "CallCachingOff",
+          "result": "Cache Miss",
+          "hit": false
+        },
+        "inputs": {
+          "downsample": 0,
+          "sequencing_tech": "CycloneSEQ",
+          "min_quality": 7,
+          "min_length": 1000,
+          "input_fastq": "/data/gukaijie/project/02.metagenomic/workflow/CycMetaAsm/wdl/test/sample.fastq.gz",
+          "host_reference": "/data/cromwell_workdir/CycMetaAsm_V1.1.0.0/database/GRCh38.p14.fa",
+          "threads": 8
+        },
+        "jobId": "65",
+        "backend": "SLURM",
+        "attempt": 1,
+        "start": "2026-05-30T07:33:29.758Z",
+        "stderr": "/data/cromwell_workdir/cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-preprocess_step/execution/stderr",
+        "callRoot": "/data/cromwell_workdir/cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-preprocess_step"
+      }
+    ],
+    "CycMetaAsmWorkflow.raw_rosa_step": [
+      {
+        "executionStatus": "Running",
+        "stdout": "/data/cromwell_workdir/cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-raw_rosa_step/execution/stdout",
+        "backendStatus": "Running",
+        "commandLine": "set -euo pipefail\necho \"Running Rosa for quality control...\"\nrosa \\\n    -i /cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-raw_rosa_step/inputs/885952258/sample.fastq.gz \\\n    --sample-name raw \\\n    --seed 9999 \\\n    --sample-size 100000 \\\n    -o result \\\n    -t 4\n\nif [ ! -f result/report.html ]; then\n    echo \"Rosa report not found!\"\n    exit 1\nfi\nmv result/report.html result/raw_QC_report.html\nzip -r raw_QC_results.zip result/\necho \"Rosa QC completed.\"",
+        "shardIndex": -1,
+        "runtimeAttributes": {
+          "runtime_minutes": "1800",
+          "queue": "compute",
+          "failOnStderr": "false",
+          "continueOnReturnCode": "0",
+          "docker": "cycmetaasm:v1.1.0",
+          "maxRetries": "0",
+          "cpu": "10",
+          "memory": "32 GB"
+        },
+        "callCaching": {
+          "allowResultReuse": false,
+          "effectiveCallCachingMode": "CallCachingOff",
+          "result": "Cache Miss",
+          "hit": false
+        },
+        "inputs": {
+          "fastq_file": "/data/gukaijie/project/02.metagenomic/workflow/CycMetaAsm/wdl/test/sample.fastq.gz",
+          "sample_id": "raw"
+        },
+        "jobId": "66",
+        "backend": "SLURM",
+        "attempt": 1,
+        "start": "2026-05-30T07:33:29.758Z",
+        "stderr": "/data/cromwell_workdir/cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-raw_rosa_step/execution/stderr",
+        "callRoot": "/data/cromwell_workdir/cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa/call-raw_rosa_step"
+      }
+    ]
+  },
+  "outputs": {},
+  "workflowRoot": "/data/cromwell_workdir/cromwell-executions/CycMetaAsmWorkflow/fd97a54b-a93c-4177-be35-3fef7184a0fa",
+  "actualWorkflowLanguage": "WDL",
+  "status": "Running",
+  "start": "2026-05-30T07:33:27.660Z",
+  "id": "fd97a54b-a93c-4177-be35-3fef7184a0fa",
+  "inputs": {
+    "checkm2_db_path": "/data/cromwell_workdir/CycMetaAsm_V1.1.0.0/database/CheckM2/uniref100.KO.1.dmnd",
+    "classify_ass2ref": 0.5,
+    "sample_id": "dcs_smoke_sample",
+    "assembler": "myloasm",
+    "short_reads2": null,
+    "sequencing_tech": "CycloneSEQ",
+    "polish": false,
+    "short_reads1": null,
+    "min_length": 1000,
+    "binner": "lorbin",
+    "input_fastq": "/data/gukaijie/project/02.metagenomic/workflow/CycMetaAsm/wdl/test/sample.fastq.gz",
+    "host_reference": "/data/cromwell_workdir/CycMetaAsm_V1.1.0.0/database/GRCh38.p14.fa",
+    "report_config_yaml": "/data/gukaijie/project/02.metagenomic/workflow/CycMetaAsm/wdl/config/report_config.yaml",
+    "downsample": 0,
+    "binning_mode": "global",
+    "min_quality": 7,
+    "classify_tool": "skani",
+    "threads": 8,
+    "skani_database": "/data/CycloneFlow_APPs/APPs/database4classifier"
+  },
+  "labels": {
+    "cromwell-workflow-id": "cromwell-fd97a54b-a93c-4177-be35-3fef7184a0fa"
+  },
+  "submission": "2026-05-30T07:33:16.398Z"
+}

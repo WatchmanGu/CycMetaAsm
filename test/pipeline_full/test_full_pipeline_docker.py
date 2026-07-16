@@ -52,6 +52,7 @@ class FullPipelineDockerTests(unittest.TestCase):
         env = os.environ.copy()
         env.setdefault("OUTPUT_ROOT", str(DEFAULT_OUTPUT_ROOT))
         env.setdefault("THREADS", "4")
+        env.setdefault("POLISH", "1")
         subprocess.run([str(SCRIPT)], cwd=str(ROOT), env=env, check=True)
 
         output_root = Path(env["OUTPUT_ROOT"])
@@ -64,9 +65,28 @@ class FullPipelineDockerTests(unittest.TestCase):
             output_dir / "classify" / "classify_result_deduplicated.tsv",
             output_dir / "summary" / "summary.tsv",
             output_dir / "summary" / "quality_stats.tsv",
+            output_root / "report" / "raw_rosa" / "raw_QC_results.zip",
+            output_root / "report" / "clean_rosa" / "clean_QC_results.zip",
+            output_root
+            / "report"
+            / "final"
+            / "sample_CycMetaAsm_Results"
+            / "sample_CycMetaAsm_Report.html",
+            output_root / "report" / "final" / "sample_CycMetaAsm_Results.zip",
+            output_root / "report" / "final" / "summary.txt",
         ]
         missing = [str(path) for path in expected if not path.exists()]
         self.assertEqual(missing, [])
+
+        if env["POLISH"].lower() in {"1", "true"}:
+            polish_expected = [
+                output_dir / "assembly" / "polish" / "genome.nextpolish.fasta",
+                output_dir / "assembly" / "polish" / "_isDone",
+                output_dir / "assembly" / "polish" / "run.cfg",
+                output_dir / "assembly" / "polish" / "lgs.fofn",
+            ]
+            missing_polish = [str(path) for path in polish_expected if not path.exists()]
+            self.assertEqual(missing_polish, [])
 
         bins = list((output_dir / "binning" / "output_bins").glob("*.fa"))
         self.assertGreater(len(bins), 0)

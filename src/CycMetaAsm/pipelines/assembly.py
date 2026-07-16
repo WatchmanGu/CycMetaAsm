@@ -257,7 +257,7 @@ parallel_jobs = 6
 multithread_jobs = {self.config.threads}
 genome = {genome_path.resolve()}
 genome_size = auto
-    workdir = {polish_dir.resolve()}
+workdir = {polish_dir.resolve()}
 polish_options = -p {{multithread_jobs}}
 
 {sgs_section}

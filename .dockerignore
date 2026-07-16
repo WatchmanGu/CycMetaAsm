@@ -1,0 +1,14 @@
+.git/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.cache/
+build/*
+!build/CycMetaAsm.bin
+CycMetaAsm.egg-info/
+database/
+database4classifier/
+test/docker_slim/output/
+cycmetaasm_v1.1.0.build_history.json

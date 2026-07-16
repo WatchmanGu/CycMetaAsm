@@ -5,18 +5,37 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 
 IMAGE=${IMAGE:-cycmetaasm:v1.1.0}
+DOCKER_USER=${DOCKER_USER:-$(id -u):$(id -g)}
 THREADS=${THREADS:-4}
-POLISH=${POLISH:-1}
-OUTPUT_ROOT=${OUTPUT_ROOT:-/tmp/opencode/cycmetaasm_full_pipeline_with_dbs}
+POLISH=${POLISH:-0}
+MIN_LENGTH=${MIN_LENGTH:-1000}
+MIN_QUALITY=${MIN_QUALITY:-10}
+OUTPUT_ROOT=${OUTPUT_ROOT:-${ROOT}/test/docker_slim/output}
 INPUT_FASTQ=${INPUT_FASTQ:-${ROOT}/wdl/test/sample.fastq.gz}
-CHECKM2_DB=${CHECKM2_DB:-/data/gukaijie/project/database/checkm2/CheckM2_database/uniref100.KO.1.dmnd}
+CHECKM2_DB=${CHECKM2_DB:-/data/gukaijie/project/database/checkm2/CheckM2_database}
 HOST_REFERENCE=${HOST_REFERENCE:-/data/gukaijie/project/database/NCBI_genome/human/datasets_GCF_000001405.40/data/GCF_000001405.40/GCF_000001405.40_GRCh38.p14_genomic.fna}
-SKANI_DATABASE=${SKANI_DATABASE:-/data/zhouan/Metagenome/metagenome_assembly/database/gtdb/r226/gtdb_r226_ani}
+SKANI_DATABASE=${SKANI_DATABASE:-/data/gukaijie/project/02.metagenomic/workflow/CycMetaAsm/database4classifier}
 SKANI_METADATA=${SKANI_METADATA:-${SKANI_DATABASE}/metadata.tsv}
+
+if [[ -d "${CHECKM2_DB}" ]]; then
+  if [[ -f "${CHECKM2_DB}/uniref100.KO.1.dmnd" ]]; then
+    CHECKM2_DB="${CHECKM2_DB}/uniref100.KO.1.dmnd"
+  else
+    shopt -s nullglob
+    checkm2_candidates=("${CHECKM2_DB}"/*.dmnd)
+    shopt -u nullglob
+    if [[ "${#checkm2_candidates[@]}" -eq 1 ]]; then
+      CHECKM2_DB="${checkm2_candidates[0]}"
+    else
+      printf 'CHECKM2_DB directory must contain exactly one .dmnd database file: %s\n' "${CHECKM2_DB}" >&2
+      exit 2
+    fi
+  fi
+fi
 
 for path in "${INPUT_FASTQ}" "${CHECKM2_DB}" "${HOST_REFERENCE}" "${SKANI_DATABASE}" "${SKANI_METADATA}"; do
   if [[ ! -e "${path}" ]]; then
-    echo "Required path not found: ${path}" >&2
+    printf 'Required path not found: %s\n' "${path}" >&2
     exit 2
   fi
 done
@@ -27,36 +46,47 @@ if [[ "${INPUT_FASTQ}" == "${ROOT}"/* ]]; then
 elif [[ "${INPUT_FASTQ}" == /data/* ]]; then
   INPUT_FASTQ_DOCKER="${INPUT_FASTQ}"
 else
-  echo "INPUT_FASTQ must be under the repository or /data so Docker can mount it: ${INPUT_FASTQ}" >&2
+  printf 'INPUT_FASTQ must be under the repository or /data so Docker can mount it: %s\n' "${INPUT_FASTQ}" >&2
   exit 2
 fi
 
 docker image inspect "${IMAGE}" >/dev/null
 
-POLISH_FLAG=""
-if [[ "${POLISH}" == "1" || "${POLISH}" == "true" ]]; then
-  POLISH_FLAG="--polish"
-elif [[ "${POLISH}" != "0" && "${POLISH}" != "false" ]]; then
-  echo "POLISH must be 1, true, 0, or false: ${POLISH}" >&2
-  exit 2
-fi
+POLISH_FLAG=()
+case "${POLISH}" in
+  1|true|TRUE) POLISH_FLAG=(--polish) ;;
+  0|false|FALSE) ;;
+  *)
+    printf 'POLISH must be 1, true, 0, or false: %s\n' "${POLISH}" >&2
+    exit 2
+    ;;
+esac
 
 mkdir -p "$(dirname "${OUTPUT_ROOT}")"
-rm -rf "${OUTPUT_ROOT}"
+if [[ -d "${OUTPUT_ROOT}" ]]; then
+  docker run --rm \
+    -v "${OUTPUT_ROOT}:/work" \
+    "${IMAGE}" \
+    sh -lc 'rm -rf /work/* /work/.[!.]* /work/..?*'
+fi
 mkdir -p "${OUTPUT_ROOT}"
 
 docker run --rm \
+  --user "${DOCKER_USER}" \
   -v "${ROOT}:/repo:ro" \
   -v "/data:/data:ro" \
   -v "${OUTPUT_ROOT}:/work" \
   -w /work \
+  -e HOME=/tmp \
   -e THREADS="${THREADS}" \
+  -e MIN_LENGTH="${MIN_LENGTH}" \
+  -e MIN_QUALITY="${MIN_QUALITY}" \
   -e INPUT_FASTQ_DOCKER="${INPUT_FASTQ_DOCKER}" \
   -e CHECKM2_DB="${CHECKM2_DB}" \
   -e HOST_REFERENCE="${HOST_REFERENCE}" \
   -e SKANI_DATABASE="${SKANI_DATABASE}" \
   -e SKANI_METADATA="${SKANI_METADATA}" \
-  -e POLISH_FLAG="${POLISH_FLAG}" \
+  -e POLISH_FLAG="${POLISH_FLAG[*]}" \
   "${IMAGE}" \
   bash -c '
     set -euo pipefail
@@ -65,6 +95,8 @@ docker run --rm \
       --sequencing-tech CycloneSEQ \
       --assembler myloasm \
       --binner lorbin \
+      --min-length "${MIN_LENGTH}" \
+      --min-quality "${MIN_QUALITY}" \
       --host-reference "${HOST_REFERENCE}" \
       --checkm2-db "${CHECKM2_DB}" \
       --skani-database "${SKANI_DATABASE}" \
@@ -76,9 +108,12 @@ docker run --rm \
   '
 
 docker run --rm \
+  --user "${DOCKER_USER}" \
   -v "${ROOT}:/repo:ro" \
+  -v "/data:/data:ro" \
   -v "${OUTPUT_ROOT}:/work" \
   -w /work \
+  -e HOME=/tmp \
   -e THREADS="${THREADS}" \
   -e INPUT_FASTQ_DOCKER="${INPUT_FASTQ_DOCKER}" \
   "${IMAGE}" \
@@ -139,10 +174,12 @@ docker run --rm \
       /work/output/summary/passed_quality_mags \
       /work/output/summary/low_quality_mags \
       /work/output/summary/quality_stats.tsv \
-      /work/output/summary/taxonomic_abundance.html \
       /work/output/summary/rank_completeness_contamination.png \
       /work/output/summary/contig_n50_violin.png \
       /work/report/final/results/
+    if [[ -f /work/output/summary/taxonomic_abundance.html ]]; then
+      cp /work/output/summary/taxonomic_abundance.html /work/report/final/results/
+    fi
 
     cycloneseq-report /repo/wdl/config/report_config.yaml \
       -o /work/report/final/results/sample_CycMetaAsm_Report.html \
@@ -177,12 +214,12 @@ required_outputs=(
 
 for relpath in "${required_outputs[@]}"; do
   if [[ ! -e "${OUTPUT_ROOT}/${relpath}" ]]; then
-    echo "Expected output missing: ${OUTPUT_ROOT}/${relpath}" >&2
+    printf 'Expected output missing: %s\n' "${OUTPUT_ROOT}/${relpath}" >&2
     exit 3
   fi
 done
 
-if [[ -n "${POLISH_FLAG}" ]]; then
+if [[ "${POLISH}" == "1" || "${POLISH}" == "true" || "${POLISH}" == "TRUE" ]]; then
   polish_outputs=(
     "output/assembly/polish/genome.nextpolish.fasta"
     "output/assembly/polish/_isDone"
@@ -191,7 +228,7 @@ if [[ -n "${POLISH_FLAG}" ]]; then
   )
   for relpath in "${polish_outputs[@]}"; do
     if [[ ! -e "${OUTPUT_ROOT}/${relpath}" ]]; then
-      echo "Expected polish output missing: ${OUTPUT_ROOT}/${relpath}" >&2
+      printf 'Expected polish output missing: %s\n' "${OUTPUT_ROOT}/${relpath}" >&2
       exit 3
     fi
   done
@@ -199,10 +236,10 @@ fi
 
 bin_count=$(find "${OUTPUT_ROOT}/output/binning/output_bins" -maxdepth 1 -name "*.fa" | wc -l)
 if [[ "${bin_count}" -eq 0 ]]; then
-  echo "Expected at least one LorBin output bin" >&2
+  printf 'Expected at least one LorBin output bin\n' >&2
   exit 4
 fi
 
-echo "Full CycMetaAsm Docker pipeline test completed: ${OUTPUT_ROOT}/output"
-echo "LorBin bins: ${bin_count}"
-echo "Final report: ${OUTPUT_ROOT}/report/final/sample_CycMetaAsm_Results/sample_CycMetaAsm_Report.html"
+printf 'Slim CycMetaAsm Docker pipeline test completed: %s/output\n' "${OUTPUT_ROOT}"
+printf 'LorBin bins: %s\n' "${bin_count}"
+printf 'Final report: %s/report/final/sample_CycMetaAsm_Results/sample_CycMetaAsm_Report.html\n' "${OUTPUT_ROOT}"

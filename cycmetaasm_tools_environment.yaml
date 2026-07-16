@@ -1,0 +1,21 @@
+name: cycmetaasm_tools
+channels:
+  - conda-forge
+  - bioconda
+channel_priority: strict
+platforms:
+  - linux-64
+dependencies:
+  - pigz>=2.8
+  - chopper
+  - minimap2>=2.2
+  - samtools>=1.14
+  - fastp
+  - myloasm>=0.5
+  - flye>=2.9
+  - nextpolish>=1.4.1
+  - semibin>=2.2
+  - checkm2
+  - skani>=0.3
+  - sylph>=0.8.1
+  - quast>=5.2.0

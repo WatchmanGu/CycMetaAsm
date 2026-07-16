@@ -152,6 +152,9 @@ test*/
 !test/pipeline_full/README.md
 !test/pipeline_full/run_full_pipeline_docker.sh
 !test/pipeline_full/test_full_pipeline_docker.py
+!test/docker_slim/
+!test/docker_slim/run_slim_image_pipeline.sh
+test/docker_slim/output/
 # Compressed files
 *.gz
 *.zip
